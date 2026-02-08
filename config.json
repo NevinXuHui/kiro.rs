@@ -1,0 +1,19 @@
+{
+  "host": "127.0.0.1",
+  "port": 8990,
+  "region": "us-east-1",
+  "kiroVersion": "0.9.2",
+  "machineId": null,
+  "apiKey": "sk-36fc0c8dc2e2e7f8c02800284deac614250fecce86fea6cd",
+  "systemVersion": "darwin#24.6.0",
+  "nodeVersion": "22.21.1",
+  "tlsBackend": "rustls",
+  "countTokensApiUrl": null,
+  "countTokensApiKey": null,
+  "countTokensAuthType": "x-api-key",
+  "proxyUrl": null,
+  "proxyUsername": null,
+  "proxyPassword": null,
+  "adminApiKey": "sk-admin123",
+  "loadBalancingMode": "priority"
+}
