@@ -27,6 +27,8 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
   const [clientSecret, setClientSecret] = useState('')
   const [priority, setPriority] = useState('0')
   const [machineId, setMachineId] = useState('')
+  const [jsonInput, setJsonInput] = useState('')
+  const [showJsonInput, setShowJsonInput] = useState(false)
 
   const { mutate, isPending } = useAddCredential()
 
@@ -38,6 +40,42 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
     setClientSecret('')
     setPriority('0')
     setMachineId('')
+    setJsonInput('')
+    setShowJsonInput(false)
+  }
+
+  const parseJsonInput = () => {
+    try {
+      const parsed = JSON.parse(jsonInput)
+
+      // 填充表单字段
+      if (parsed.refreshToken) {
+        setRefreshToken(parsed.refreshToken)
+      }
+      if (parsed.authMethod) {
+        setAuthMethod(parsed.authMethod as AuthMethod)
+      }
+      if (parsed.region) {
+        setRegion(parsed.region)
+      }
+      if (parsed.clientId) {
+        setClientId(parsed.clientId)
+      }
+      if (parsed.clientSecret) {
+        setClientSecret(parsed.clientSecret)
+      }
+      if (parsed.priority !== undefined) {
+        setPriority(String(parsed.priority))
+      }
+      if (parsed.machineId) {
+        setMachineId(parsed.machineId)
+      }
+
+      toast.success('JSON 解析成功，已填充表单')
+      setShowJsonInput(false)
+    } catch (error) {
+      toast.error('JSON 格式错误，请检查输入')
+    }
   }
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -80,27 +118,71 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>添加凭据</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit}>
           <div className="space-y-4 py-4">
-            {/* Refresh Token */}
-            <div className="space-y-2">
-              <label htmlFor="refreshToken" className="text-sm font-medium">
-                Refresh Token <span className="text-red-500">*</span>
-              </label>
-              <Input
-                id="refreshToken"
-                type="password"
-                placeholder="请输入 Refresh Token"
-                value={refreshToken}
-                onChange={(e) => setRefreshToken(e.target.value)}
+            {/* JSON 输入切换按钮 */}
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">
+                {showJsonInput ? '手动填写表单' : '从 JSON 导入'}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowJsonInput(!showJsonInput)}
                 disabled={isPending}
-              />
+              >
+                {showJsonInput ? '切换到表单' : '切换到 JSON'}
+              </Button>
             </div>
+
+            {/* JSON 输入区域 */}
+            {showJsonInput && (
+              <div className="space-y-2">
+                <label htmlFor="jsonInput" className="text-sm font-medium">
+                  粘贴凭据 JSON
+                </label>
+                <textarea
+                  id="jsonInput"
+                  className="flex min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono"
+                  placeholder={`{\n  "refreshToken": "aor...",\n  "authMethod": "idc",\n  "clientId": "u-...",\n  "clientSecret": "eyJ...",\n  "region": "us-east-1",\n  "priority": 0,\n  "machineId": "..."\n}`}
+                  value={jsonInput}
+                  onChange={(e) => setJsonInput(e.target.value)}
+                  disabled={isPending}
+                />
+                <Button
+                  type="button"
+                  onClick={parseJsonInput}
+                  disabled={isPending || !jsonInput.trim()}
+                  className="w-full"
+                >
+                  解析并填充表单
+                </Button>
+              </div>
+            )}
+
+            {/* 表单字段 */}
+            {!showJsonInput && (
+              <>
+                {/* Refresh Token */}
+                <div className="space-y-2">
+                  <label htmlFor="refreshToken" className="text-sm font-medium">
+                    Refresh Token <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    id="refreshToken"
+                    type="password"
+                    placeholder="请输入 Refresh Token"
+                    value={refreshToken}
+                    onChange={(e) => setRefreshToken(e.target.value)}
+                    disabled={isPending}
+                  />
+                </div>
 
             {/* 认证方式 */}
             <div className="space-y-2">
@@ -198,6 +280,8 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
                 可选，64 位十六进制字符串，留空使用配置中字段, 否则由刷新Token自动派生
               </p>
             </div>
+              </>
+            )}
           </div>
 
           <DialogFooter>
