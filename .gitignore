@@ -14,3 +14,15 @@
 /credentials.*
 /kiro_balance_cache.json
 /kiro_stats.json
+
+# IDE 配置
+/.vscode/
+/.history/
+/.lh/
+
+# 工作流配置
+/.spec-workflow/
+
+# 敏感信息
+/kiro-credentials.json
+/tokens_export.json
