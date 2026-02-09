@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -7,15 +8,24 @@ import {
 import { Progress } from '@/components/ui/progress'
 import { useCredentialBalance } from '@/hooks/use-credentials'
 import { parseError } from '@/lib/utils'
+import type { BalanceResponse } from '@/types/api'
 
 interface BalanceDialogProps {
   credentialId: number | null
   open: boolean
   onOpenChange: (open: boolean) => void
+  onBalanceLoaded?: (id: number, balance: BalanceResponse) => void
 }
 
-export function BalanceDialog({ credentialId, open, onOpenChange }: BalanceDialogProps) {
+export function BalanceDialog({ credentialId, open, onOpenChange, onBalanceLoaded }: BalanceDialogProps) {
   const { data: balance, isLoading, error } = useCredentialBalance(credentialId)
+
+  // 获取到新数据时同步回调给父组件
+  useEffect(() => {
+    if (balance && credentialId !== null && onBalanceLoaded) {
+      onBalanceLoaded(credentialId, balance)
+    }
+  }, [balance, credentialId, onBalanceLoaded])
 
   const formatDate = (timestamp: number | null) => {
     if (!timestamp) return '未知'
@@ -72,8 +82,8 @@ export function BalanceDialog({ credentialId, open, onOpenChange }: BalanceDialo
             {/* 使用进度 */}
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span>已使用: ${formatNumber(balance.currentUsage)}</span>
-                <span>限额: ${formatNumber(balance.usageLimit)}</span>
+                <span>已使用: {formatNumber(balance.currentUsage)}</span>
+                <span>限额: {formatNumber(balance.usageLimit)}</span>
               </div>
               <Progress value={balance.usagePercentage} />
               <div className="text-center text-sm text-muted-foreground">
@@ -86,7 +96,7 @@ export function BalanceDialog({ credentialId, open, onOpenChange }: BalanceDialo
               <div>
                 <span className="text-muted-foreground">剩余额度：</span>
                 <span className="font-medium text-green-600">
-                  ${formatNumber(balance.remaining)}
+                  {formatNumber(balance.remaining)}
                 </span>
               </div>
               <div>

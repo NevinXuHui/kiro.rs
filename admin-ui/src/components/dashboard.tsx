@@ -690,6 +690,13 @@ export function Dashboard({ onLogout }: DashboardProps) {
         credentialId={selectedCredentialId}
         open={balanceDialogOpen}
         onOpenChange={setBalanceDialogOpen}
+        onBalanceLoaded={(id, balance) => {
+          setBalanceMap(prev => {
+            const next = new Map(prev)
+            next.set(id, balance)
+            return next
+          })
+        }}
       />
 
       {/* 添加凭据对话框 */}
