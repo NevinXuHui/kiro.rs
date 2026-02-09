@@ -58,7 +58,8 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
         setAuthMethod(parsed.authMethod as AuthMethod)
       }
       if (parsed.region) {
-        setRegion(parsed.region)
+        setAuthRegion(parsed.region)
+        setApiRegion(parsed.region)
       }
       if (parsed.clientId) {
         setClientId(parsed.clientId)
