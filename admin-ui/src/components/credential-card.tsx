@@ -19,6 +19,7 @@ import type { CredentialStatusItem, BalanceResponse } from '@/types/api'
 import {
   useSetDisabled,
   useSetPriority,
+  useSetPrimary,
   useResetFailure,
   useDeleteCredential,
 } from '@/hooks/use-credentials'
@@ -62,6 +63,7 @@ export function CredentialCard({
 
   const setDisabled = useSetDisabled()
   const setPriority = useSetPriority()
+  const setPrimary = useSetPrimary()
   const resetFailure = useResetFailure()
   const deleteCredential = useDeleteCredential()
 
@@ -128,9 +130,29 @@ export function CredentialCard({
     })
   }
 
+  const handleSetPrimary = () => {
+    if (credential.isCurrent || credential.disabled) return
+    setPrimary.mutate(credential.id, {
+      onSuccess: (res) => toast.success(res.message),
+      onError: (err) => toast.error('操作失败: ' + (err as Error).message),
+    })
+  }
+
+  // 双击卡片设为首选（排除交互元素内的点击）
+  const handleCardDoubleClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement
+    if (target.closest('button, input, [role="switch"], [role="checkbox"], a')) return
+    handleSetPrimary()
+  }
+
   return (
     <>
-      <Card className={credential.isCurrent ? 'ring-2 ring-primary' : ''}>
+      <Card
+        className={`${credential.isCurrent ? 'ring-2 ring-primary' : ''} ${
+          !credential.isCurrent && !credential.disabled ? 'cursor-pointer hover:border-primary/50 transition-colors' : ''
+        }`}
+        onDoubleClick={handleCardDoubleClick}
+      >
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -145,6 +167,9 @@ export function CredentialCard({
                 )}
                 {credential.disabled && (
                   <Badge variant="destructive">已禁用</Badge>
+                )}
+                {!credential.isCurrent && !credential.disabled && (
+                  <span className="text-xs text-muted-foreground font-normal">双击设为首选</span>
                 )}
               </CardTitle>
             </div>

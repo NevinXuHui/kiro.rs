@@ -39,6 +39,12 @@ export function Dashboard({ onLogout }: DashboardProps) {
   const [loadingBalanceIds, setLoadingBalanceIds] = useState<Set<number>>(new Set())
   const [queryingInfo, setQueryingInfo] = useState(false)
   const [queryInfoProgress, setQueryInfoProgress] = useState({ current: 0, total: 0 })
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('admin-active-tab') || 'credentials')
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value)
+    localStorage.setItem('admin-active-tab', value)
+  }
   const cancelVerifyRef = useRef(false)
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 12
@@ -105,6 +111,43 @@ export function Dashboard({ onLogout }: DashboardProps) {
       return next.size === prev.size ? prev : next
     })
   }, [data?.credentials])
+
+  // 自动查询当前页缺少余额数据的启用凭据
+  useEffect(() => {
+    if (!currentCredentials.length || queryingInfo) return
+
+    const idsToFetch = currentCredentials
+      .filter(c => !c.disabled && !balanceMap.has(c.id) && !loadingBalanceIds.has(c.id))
+      .map(c => c.id)
+
+    if (idsToFetch.length === 0) return
+
+    let cancelled = false
+    ;(async () => {
+      for (const id of idsToFetch) {
+        if (cancelled) break
+        setLoadingBalanceIds(prev => new Set(prev).add(id))
+        try {
+          const balance = await getCredentialBalance(id)
+          if (!cancelled) {
+            setBalanceMap(prev => new Map(prev).set(id, balance))
+          }
+        } catch {
+          // 静默失败，用户可手动点击查询
+        } finally {
+          if (!cancelled) {
+            setLoadingBalanceIds(prev => {
+              const next = new Set(prev)
+              next.delete(id)
+              return next
+            })
+          }
+        }
+      }
+    })()
+
+    return () => { cancelled = true }
+  }, [currentCredentials.map(c => c.id).join(',')]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleDarkMode = () => {
     setDarkMode(!darkMode)
@@ -507,7 +550,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
               onClick={handleToggleLoadBalancing}
               disabled={isLoadingMode || isSettingMode}
               title="切换负载均衡模式"
-              className="hidden sm:flex"
+              className="text-xs sm:text-sm h-7 sm:h-9 px-2 sm:px-3"
             >
               {isLoadingMode ? '加载中...' : (loadBalancingData?.mode === 'priority' ? '优先级' : '均衡')}
             </Button>
@@ -564,7 +607,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
         </div>
 
         {/* Tab 切换面板 */}
-        <Tabs defaultValue="credentials" className="space-y-4">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
           <TabsList className="w-full justify-start overflow-x-auto">
             <TabsTrigger value="credentials">凭据</TabsTrigger>
             <TabsTrigger value="tokens">Token</TabsTrigger>

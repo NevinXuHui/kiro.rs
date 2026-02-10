@@ -1306,6 +1306,32 @@ impl MultiTokenManager {
         Ok(())
     }
 
+    /// 将指定凭据设为首选（Admin API）
+    ///
+    /// 目标凭据 priority 设为 0，其他 priority 为 0 的凭据提升为 1，
+    /// 确保目标凭据唯一拥有最高优先级。
+    pub fn set_primary(&self, id: u64) -> anyhow::Result<()> {
+        {
+            let mut entries = self.entries.lock();
+            // 验证目标凭据存在
+            if !entries.iter().any(|e| e.id == id) {
+                anyhow::bail!("凭据不存在: {}", id);
+            }
+            // 将其他 priority=0 的凭据提升为 1
+            for entry in entries.iter_mut() {
+                if entry.id != id && entry.credentials.priority == 0 {
+                    entry.credentials.priority = 1;
+                }
+            }
+            // 目标凭据设为 0
+            let target = entries.iter_mut().find(|e| e.id == id).unwrap();
+            target.credentials.priority = 0;
+        }
+        self.select_highest_priority();
+        self.persist_credentials()?;
+        Ok(())
+    }
+
     /// 重置凭据失败计数并重新启用（Admin API）
     pub fn reset_and_enable(&self, id: u64) -> anyhow::Result<()> {
         {

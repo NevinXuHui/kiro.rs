@@ -2,7 +2,7 @@
 
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     response::IntoResponse,
 };
 
@@ -56,6 +56,22 @@ pub async fn set_credential_priority(
     }
 }
 
+/// POST /api/admin/credentials/:id/set-primary
+/// 将凭据设为首选（priority=0，其他同级凭据降级）
+pub async fn set_credential_primary(
+    State(state): State<AdminState>,
+    Path(id): Path<u64>,
+) -> impl IntoResponse {
+    match state.service.set_primary(id) {
+        Ok(_) => Json(SuccessResponse::new(format!(
+            "凭据 #{} 已设为首选",
+            id
+        )))
+        .into_response(),
+        Err(e) => (e.status_code(), Json(e.into_response())).into_response(),
+    }
+}
+
 /// POST /api/admin/credentials/:id/reset
 /// 重置失败计数并重新启用
 pub async fn reset_failure_count(
@@ -73,12 +89,19 @@ pub async fn reset_failure_count(
 }
 
 /// GET /api/admin/credentials/:id/balance
-/// 获取指定凭据的余额
+/// 获取指定凭据的余额（?force=true 跳过缓存）
 pub async fn get_credential_balance(
     State(state): State<AdminState>,
     Path(id): Path<u64>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
-    match state.service.get_balance(id).await {
+    let force = params.get("force").map(|v| v == "true").unwrap_or(false);
+    let result = if force {
+        state.service.get_balance_fresh(id).await
+    } else {
+        state.service.get_balance(id).await
+    };
+    match result {
         Ok(response) => Json(response).into_response(),
         Err(e) => (e.status_code(), Json(e.into_response())).into_response(),
     }

@@ -3,6 +3,7 @@ import {
   getCredentials,
   setCredentialDisabled,
   setCredentialPriority,
+  setCredentialPrimary,
   resetCredentialFailure,
   getCredentialBalance,
   addCredential,
@@ -19,7 +20,7 @@ import {
   updateProxyConfig,
   testConnectivity,
 } from '@/api/credentials'
-import type { AddCredentialRequest, CreateApiKeyRequest, UpdateApiKeyRequest, UpdateProxyConfigRequest, ConnectivityTestRequest } from '@/types/api'
+import type { AddCredentialRequest, CreateApiKeyRequest, UpdateApiKeyRequest, UpdateProxyConfigRequest, ConnectivityTestRequest, CredentialsStatusResponse } from '@/types/api'
 
 // 查询凭据列表
 export function useCredentials() {
@@ -27,16 +28,19 @@ export function useCredentials() {
     queryKey: ['credentials'],
     queryFn: getCredentials,
     refetchInterval: 30000, // 每 30 秒刷新一次
+    staleTime: 0,
   })
 }
 
-// 查询凭据余额
+// 查询凭据余额（不缓存，每次都发真实请求）
 export function useCredentialBalance(id: number | null) {
   return useQuery({
     queryKey: ['credential-balance', id],
     queryFn: () => getCredentialBalance(id!),
     enabled: id !== null,
     retry: false, // 余额查询失败时不重试（避免重复请求被封禁的账号）
+    staleTime: 0,
+    gcTime: 0,
   })
 }
 
@@ -59,6 +63,38 @@ export function useSetPriority() {
     mutationFn: ({ id, priority }: { id: number; priority: number }) =>
       setCredentialPriority(id, priority),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['credentials'] })
+    },
+  })
+}
+
+// 设为首选（乐观更新：双击后立即刷新 UI）
+export function useSetPrimary() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => setCredentialPrimary(id),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ['credentials'] })
+      const previous = queryClient.getQueryData<CredentialsStatusResponse>(['credentials'])
+      if (previous) {
+        queryClient.setQueryData<CredentialsStatusResponse>(['credentials'], {
+          ...previous,
+          currentId: id,
+          credentials: previous.credentials.map(c => ({
+            ...c,
+            isCurrent: c.id === id,
+            priority: c.id === id ? 0 : (c.priority === 0 ? 1 : c.priority),
+          })),
+        })
+      }
+      return { previous }
+    },
+    onError: (_err, _id, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(['credentials'], context.previous)
+      }
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['credentials'] })
     },
   })

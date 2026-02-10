@@ -81,8 +81,8 @@ impl AdminService {
             })
             .collect();
 
-        // 按优先级排序（数字越小优先级越高）
-        credentials.sort_by_key(|c| c.priority);
+        // 按 ID 排序（保持加入顺序）
+        credentials.sort_by_key(|c| c.id);
 
         CredentialsStatusResponse {
             total: snapshot.total,
@@ -116,6 +116,13 @@ impl AdminService {
             .map_err(|e| self.classify_error(e, id))
     }
 
+    /// 将凭据设为首选
+    pub fn set_primary(&self, id: u64) -> Result<(), AdminServiceError> {
+        self.token_manager
+            .set_primary(id)
+            .map_err(|e| self.classify_error(e, id))
+    }
+
     /// 重置失败计数并重新启用
     pub fn reset_and_enable(&self, id: u64) -> Result<(), AdminServiceError> {
         self.token_manager
@@ -137,7 +144,20 @@ impl AdminService {
             }
         }
 
-        // 缓存未命中或已过期，从上游获取
+        self.fetch_and_cache_balance(id).await
+    }
+
+    /// 获取凭据余额（跳过缓存，强制从上游获取）
+    pub async fn get_balance_fresh(&self, id: u64) -> Result<BalanceResponse, AdminServiceError> {
+        tracing::debug!("凭据 #{} 强制刷新余额", id);
+        self.fetch_and_cache_balance(id).await
+    }
+
+    /// 从上游获取余额并更新缓存
+    async fn fetch_and_cache_balance(
+        &self,
+        id: u64,
+    ) -> Result<BalanceResponse, AdminServiceError> {
         let balance = self.fetch_balance(id).await?;
 
         // 更新缓存

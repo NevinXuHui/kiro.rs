@@ -66,6 +66,16 @@ export async function setCredentialPriority(
   return data
 }
 
+// 将凭据设为首选
+export async function setCredentialPrimary(
+  id: number
+): Promise<SuccessResponse> {
+  const { data } = await api.post<SuccessResponse>(
+    `/credentials/${id}/set-primary`
+  )
+  return data
+}
+
 // 重置失败计数
 export async function resetCredentialFailure(
   id: number
@@ -74,9 +84,9 @@ export async function resetCredentialFailure(
   return data
 }
 
-// 获取凭据余额
+// 获取凭据余额（强制跳过后端缓存）
 export async function getCredentialBalance(id: number): Promise<BalanceResponse> {
-  const { data } = await api.get<BalanceResponse>(`/credentials/${id}/balance`)
+  const { data } = await api.get<BalanceResponse>(`/credentials/${id}/balance?force=true`)
   return data
 }
 
