@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Key, Plus, Pencil, Trash2, Copy, ChevronDown, ChevronUp, Shield, ShieldOff, Loader2 } from 'lucide-react'
+import { Key, Plus, Pencil, Trash2, Copy, ChevronDown, ChevronUp, Shield, ShieldOff, Loader2, ArrowDownToLine, ArrowUpFromLine } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -7,8 +7,10 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { useApiKeys, useCreateApiKey, useUpdateApiKey, useDeleteApiKey } from '@/hooks/use-credentials'
-import { extractErrorMessage } from '@/lib/utils'
+import { MultiSelect } from '@/components/ui/multi-select'
+import { useApiKeys, useCreateApiKey, useUpdateApiKey, useDeleteApiKey, useTokenUsage } from '@/hooks/use-credentials'
+import { extractErrorMessage, formatNumber } from '@/lib/utils'
+import { SUPPORTED_MODELS } from '@/constants/models'
 import type { ApiKeyEntryView } from '@/types/api'
 
 export function ApiKeyPanel() {
@@ -22,10 +24,11 @@ export function ApiKeyPanel() {
   const [formLabel, setFormLabel] = useState('')
   const [formKey, setFormKey] = useState('')
   const [formReadOnly, setFormReadOnly] = useState(false)
-  const [formAllowedModels, setFormAllowedModels] = useState('')
+  const [formAllowedModels, setFormAllowedModels] = useState<string[]>([])
   const [formDisabled, setFormDisabled] = useState(false)
 
   const { data: apiKeys, isLoading, error } = useApiKeys()
+  const { data: tokenUsage } = useTokenUsage()
   const createMutation = useCreateApiKey()
   const updateMutation = useUpdateApiKey()
   const deleteMutation = useDeleteApiKey()
@@ -35,7 +38,7 @@ export function ApiKeyPanel() {
     setFormLabel('')
     setFormKey('')
     setFormReadOnly(false)
-    setFormAllowedModels('')
+    setFormAllowedModels([])
     setFormDisabled(false)
     setNewKeyResult(null)
   }
@@ -51,7 +54,7 @@ export function ApiKeyPanel() {
     setEditingKey(apiKey)
     setFormLabel(apiKey.label)
     setFormReadOnly(apiKey.readOnly)
-    setFormAllowedModels(apiKey.allowedModels?.join(', ') || '')
+    setFormAllowedModels(apiKey.allowedModels || [])
     setFormDisabled(apiKey.disabled)
     setEditDialogOpen(true)
   }
@@ -63,9 +66,7 @@ export function ApiKeyPanel() {
       return
     }
 
-    const allowedModels = formAllowedModels.trim()
-      ? formAllowedModels.split(',').map(s => s.trim()).filter(Boolean)
-      : undefined
+    const allowedModels = formAllowedModels.length > 0 ? formAllowedModels : undefined
 
     createMutation.mutate(
       {
@@ -94,9 +95,7 @@ export function ApiKeyPanel() {
       return
     }
 
-    const allowedModels = formAllowedModels.trim()
-      ? formAllowedModels.split(',').map(s => s.trim()).filter(Boolean)
-      : null
+    const allowedModels = formAllowedModels.length > 0 ? formAllowedModels : null
 
     updateMutation.mutate(
       {
@@ -216,7 +215,12 @@ export function ApiKeyPanel() {
               </CardContent>
             </Card>
           ) : (
-            apiKeys.map((apiKey) => (
+            apiKeys.map((apiKey) => {
+              // 获取该 API Key 的 token 使用统计
+              const stats = tokenUsage?.byApiKey[apiKey.id.toString()]
+              const totalTokens = stats ? stats.inputTokens + stats.outputTokens : 0
+
+              return (
               <Card key={apiKey.id} className={apiKey.disabled ? 'opacity-60' : ''}>
                 <CardContent className="py-4">
                   <div className="flex items-center justify-between">
@@ -238,6 +242,20 @@ export function ApiKeyPanel() {
                         {apiKey.allowedModels && apiKey.allowedModels.length > 0 && (
                           <div className="text-xs">
                             模型白名单: {apiKey.allowedModels.join(', ')}
+                          </div>
+                        )}
+                        {stats && (
+                          <div className="flex items-center gap-3 text-xs">
+                            <div className="flex items-center gap-1">
+                              <ArrowDownToLine className="h-3 w-3 text-blue-600" />
+                              <span className="text-blue-600">{formatNumber(stats.inputTokens)}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <ArrowUpFromLine className="h-3 w-3 text-green-600" />
+                              <span className="text-green-600">{formatNumber(stats.outputTokens)}</span>
+                            </div>
+                            <span>总计: {formatNumber(totalTokens)} tokens</span>
+                            <span>({stats.requests} 次请求)</span>
                           </div>
                         )}
                         <div className="text-xs">
@@ -279,7 +297,8 @@ export function ApiKeyPanel() {
                   </div>
                 </CardContent>
               </Card>
-            ))
+            )
+            })
           )}
         </div>
       )}
@@ -339,11 +358,12 @@ export function ApiKeyPanel() {
                 <Switch checked={formReadOnly} onCheckedChange={setFormReadOnly} />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">模型白名单（可选，逗号分隔）</label>
-                <Input
+                <label className="text-sm font-medium">模型白名单（可选）</label>
+                <MultiSelect
+                  options={SUPPORTED_MODELS}
                   value={formAllowedModels}
-                  onChange={(e) => setFormAllowedModels(e.target.value)}
-                  placeholder="claude-sonnet-4-20250514, claude-3-5-haiku-20241022"
+                  onChange={setFormAllowedModels}
+                  placeholder="选择允许的模型..."
                 />
               </div>
               <DialogFooter>
@@ -379,11 +399,12 @@ export function ApiKeyPanel() {
               <Switch checked={formReadOnly} onCheckedChange={setFormReadOnly} />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">模型白名单（可选，逗号分隔）</label>
-              <Input
+              <label className="text-sm font-medium">模型白名单（可选）</label>
+              <MultiSelect
+                options={SUPPORTED_MODELS}
                 value={formAllowedModels}
-                onChange={(e) => setFormAllowedModels(e.target.value)}
-                placeholder="claude-sonnet-4-20250514, claude-3-5-haiku-20241022"
+                onChange={setFormAllowedModels}
+                placeholder="选择允许的模型..."
               />
             </div>
             <div className="flex items-center justify-between">
