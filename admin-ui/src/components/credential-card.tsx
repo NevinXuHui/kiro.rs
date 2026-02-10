@@ -31,6 +31,7 @@ interface CredentialCardProps {
   onToggleSelect: () => void
   balance: BalanceResponse | null
   loadingBalance: boolean
+  onPrimarySet?: () => void
 }
 
 function formatLastUsed(lastUsedAt: string | null): string {
@@ -56,6 +57,7 @@ export function CredentialCard({
   onToggleSelect,
   balance,
   loadingBalance,
+  onPrimarySet,
 }: CredentialCardProps) {
   const [editingPriority, setEditingPriority] = useState(false)
   const [priorityValue, setPriorityValue] = useState(String(credential.priority))
@@ -133,7 +135,10 @@ export function CredentialCard({
   const handleSetPrimary = () => {
     if (credential.isCurrent || credential.disabled) return
     setPrimary.mutate(credential.id, {
-      onSuccess: (res) => toast.success(res.message),
+      onSuccess: (res) => {
+        toast.success(res.message)
+        onPrimarySet?.()
+      },
       onError: (err) => toast.error('操作失败: ' + (err as Error).message),
     })
   }
@@ -242,7 +247,7 @@ export function CredentialCard({
               <span className="font-medium">
                 {loadingBalance ? (
                   <Loader2 className="inline w-3 h-3 animate-spin" />
-                ) : balance?.subscriptionTitle || '未知'}
+                ) : balance?.subscriptionTitle?.replace(/^KIRO\s*/i, '') || '未知'}
               </span>
             </div>
             <div>

@@ -73,6 +73,12 @@ export function Dashboard({ onLogout }: DashboardProps) {
     return Boolean(credential?.disabled)
   }).length
 
+  // 计算全部凭据总剩余量
+  const totalRemaining = Array.from(balanceMap.values()).reduce((sum, b) => sum + b.remaining, 0)
+  const totalLimit = Array.from(balanceMap.values()).reduce((sum, b) => sum + b.usageLimit, 0)
+  const balanceLoadedCount = balanceMap.size
+  const enabledCount = data?.credentials.filter(c => !c.disabled).length || 0
+
   // 当凭据列表变化时重置到第一页
   useEffect(() => {
     setCurrentPage(1)
@@ -112,11 +118,11 @@ export function Dashboard({ onLogout }: DashboardProps) {
     })
   }, [data?.credentials])
 
-  // 自动查询当前页缺少余额数据的启用凭据
+  // 自动查询所有缺少余额数据的启用凭据
   useEffect(() => {
-    if (!currentCredentials.length || queryingInfo) return
+    if (!data?.credentials.length || queryingInfo) return
 
-    const idsToFetch = currentCredentials
+    const idsToFetch = data.credentials
       .filter(c => !c.disabled && !balanceMap.has(c.id) && !loadingBalanceIds.has(c.id))
       .map(c => c.id)
 
@@ -147,7 +153,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
     })()
 
     return () => { cancelled = true }
-  }, [currentCredentials.map(c => c.id).join(',')]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [data?.credentials.map(c => c.id).join(',')]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleDarkMode = () => {
     setDarkMode(!darkMode)
@@ -570,7 +576,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
       {/* 主内容 */}
       <main className="container mx-auto px-4 md:px-8 py-6">
         {/* 统计卡片 */}
-        <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 mb-6">
           <Card>
             <CardHeader className="pb-1 sm:pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
               <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
@@ -589,6 +595,24 @@ export function Dashboard({ onLogout }: DashboardProps) {
             </CardHeader>
             <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
               <div className="text-xl sm:text-2xl font-bold text-green-600">{data?.available || 0}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-1 sm:pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
+                总剩余量
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
+              <div className="text-xl sm:text-2xl font-bold text-blue-600">
+                {totalRemaining.toFixed(1)}
+              </div>
+              <div className="text-[10px] sm:text-xs text-muted-foreground">
+                / {totalLimit.toFixed(1)}
+                {balanceLoadedCount < enabledCount && (
+                  <span className="ml-1">({balanceLoadedCount}/{enabledCount})</span>
+                )}
+              </div>
             </CardContent>
           </Card>
           <Card>
@@ -714,6 +738,13 @@ export function Dashboard({ onLogout }: DashboardProps) {
                     onToggleSelect={() => toggleSelect(credential.id)}
                     balance={balanceMap.get(credential.id) || null}
                     loadingBalance={loadingBalanceIds.has(credential.id)}
+                    onPrimarySet={() => {
+                      if (loadBalancingData?.mode !== 'priority') {
+                        setLoadBalancingMode('priority', {
+                          onSuccess: () => toast.success('已自动切换到优先级模式'),
+                        })
+                      }
+                    }}
                   />
                   </div>
                 ))}
