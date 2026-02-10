@@ -402,6 +402,8 @@ struct CredentialEntry {
     credentials: KiroCredentials,
     /// API 调用连续失败次数
     failure_count: u32,
+    /// API 调用累计失败次数（不会被重置）
+    total_failure_count: u64,
     /// 是否已禁用
     disabled: bool,
     /// 禁用原因（用于区分手动禁用 vs 自动禁用，便于自愈）
@@ -427,6 +429,8 @@ enum DisabledReason {
 #[derive(Serialize, Deserialize)]
 struct StatsEntry {
     success_count: u64,
+    #[serde(default)]
+    total_failure_count: u64,
     last_used_at: Option<String>,
 }
 
@@ -446,6 +450,8 @@ pub struct CredentialEntrySnapshot {
     pub disabled: bool,
     /// 连续失败次数
     pub failure_count: u32,
+    /// 累计失败次数
+    pub total_failure_count: u64,
     /// 认证方式
     pub auth_method: Option<String>,
     /// 是否有 Profile ARN
@@ -566,6 +572,7 @@ impl MultiTokenManager {
                     id,
                     credentials: cred,
                     failure_count: 0,
+                    total_failure_count: 0,
                     disabled: false,
                     disabled_reason: None,
                     success_count: 0,
@@ -984,6 +991,7 @@ impl MultiTokenManager {
         for entry in entries.iter_mut() {
             if let Some(s) = stats.get(&entry.id.to_string()) {
                 entry.success_count = s.success_count;
+                entry.total_failure_count = s.total_failure_count;
                 entry.last_used_at = s.last_used_at.clone();
             }
         }
@@ -1008,6 +1016,7 @@ impl MultiTokenManager {
                         e.id.to_string(),
                         StatsEntry {
                             success_count: e.success_count,
+                            total_failure_count: e.total_failure_count,
                             last_used_at: e.last_used_at.clone(),
                         },
                     )
@@ -1086,6 +1095,7 @@ impl MultiTokenManager {
             };
 
             entry.failure_count += 1;
+            entry.total_failure_count += 1;
             entry.last_used_at = Some(Utc::now().to_rfc3339());
             let failure_count = entry.failure_count;
 
@@ -1232,6 +1242,7 @@ impl MultiTokenManager {
                     priority: e.credentials.priority,
                     disabled: e.disabled,
                     failure_count: e.failure_count,
+                    total_failure_count: e.total_failure_count,
                     auth_method: e.credentials.auth_method.as_deref().map(|m| {
                         if m.eq_ignore_ascii_case("builder-id") || m.eq_ignore_ascii_case("iam") {
                             "idc".to_string()
@@ -1452,6 +1463,7 @@ impl MultiTokenManager {
                 id: new_id,
                 credentials: validated_cred,
                 failure_count: 0,
+                total_failure_count: 0,
                 disabled: false,
                 disabled_reason: None,
                 success_count: 0,

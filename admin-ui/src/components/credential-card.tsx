@@ -205,9 +205,12 @@ export function CredentialCard({
             </div>
             <div>
               <span className="text-muted-foreground">失败次数：</span>
-              <span className={credential.failureCount > 0 ? 'text-red-500 font-medium' : ''}>
-                {credential.failureCount}
+              <span className={credential.totalFailureCount > 0 ? 'text-red-500 font-medium' : ''}>
+                {credential.totalFailureCount}
               </span>
+              {credential.failureCount > 0 && (
+                <span className="text-red-500 text-xs ml-1">(连续 {credential.failureCount})</span>
+              )}
             </div>
             <div>
               <span className="text-muted-foreground">订阅等级：</span>
