@@ -3,12 +3,16 @@ import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { useTokenUsage, useResetTokenUsage } from '@/hooks/use-credentials'
+import { useTokenUsage, useResetTokenUsage, useApiKeys } from '@/hooks/use-credentials'
 import { formatNumber } from '@/lib/utils'
 
 export function TokenUsagePanel() {
   const { data, isLoading, error } = useTokenUsage()
+  const { data: apiKeys } = useApiKeys()
   const resetMutation = useResetTokenUsage()
+
+  // 创建 API Key ID 到标签的映射
+  const apiKeyMap = new Map(apiKeys?.map(key => [key.id, key.label]) || [])
 
   const handleReset = () => {
     if (!confirm('确定要重置所有 Token 使用统计吗？此操作不可撤销。')) return
@@ -205,6 +209,7 @@ export function TokenUsagePanel() {
                     <th className="text-left py-2 pr-4 font-medium">模型</th>
                     <th className="text-right py-2 pr-4 font-medium">输入</th>
                     <th className="text-right py-2 pr-4 font-medium">输出</th>
+                    <th className="text-left py-2 pr-4 font-medium">API Key</th>
                     <th className="text-right py-2 font-medium">凭据</th>
                   </tr>
                 </thead>
@@ -212,12 +217,20 @@ export function TokenUsagePanel() {
                   {recentRequests.map((req, idx) => {
                     const time = new Date(req.timestamp)
                     const timeStr = time.toLocaleTimeString('zh-CN', { hour12: false })
+                    const apiKeyLabel = req.apiKeyId ? apiKeyMap.get(req.apiKeyId) : null
                     return (
                       <tr key={idx} className="border-b last:border-0">
                         <td className="py-2 pr-4 text-muted-foreground whitespace-nowrap">{timeStr}</td>
                         <td className="py-2 pr-4 truncate max-w-[200px]" title={req.model}>{req.model}</td>
                         <td className="py-2 pr-4 text-right text-blue-600">{formatNumber(req.inputTokens)}</td>
                         <td className="py-2 pr-4 text-right text-green-600">{formatNumber(req.outputTokens)}</td>
+                        <td className="py-2 pr-4">
+                          {apiKeyLabel ? (
+                            <Badge variant="secondary" className="text-xs">{apiKeyLabel}</Badge>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">-</span>
+                          )}
+                        </td>
                         <td className="py-2 text-right">#{req.credentialId}</td>
                       </tr>
                     )
