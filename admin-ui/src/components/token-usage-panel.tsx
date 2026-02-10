@@ -1,4 +1,5 @@
-import { BarChart3, RotateCcw, RefreshCw, ArrowDownToLine, ArrowUpFromLine, Hash, Loader2 } from 'lucide-react'
+import { useState } from 'react'
+import { BarChart3, RotateCcw, RefreshCw, ArrowDownToLine, ArrowUpFromLine, Hash, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -6,10 +7,14 @@ import { Badge } from '@/components/ui/badge'
 import { useTokenUsage, useResetTokenUsage, useApiKeys } from '@/hooks/use-credentials'
 import { formatNumber } from '@/lib/utils'
 
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const
+
 export function TokenUsagePanel() {
   const { data, isLoading, error, refetch, isFetching } = useTokenUsage()
   const { data: apiKeys } = useApiKeys()
   const resetMutation = useResetTokenUsage()
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
 
   // 创建 API Key ID 到标签的映射
   const apiKeyMap = new Map(apiKeys?.map(key => [key.id, key.label]) || [])
@@ -50,8 +55,11 @@ export function TokenUsagePanel() {
   const credentialEntries = Object.entries(data.byCredential).sort((a, b) =>
     (b[1].inputTokens + b[1].outputTokens) - (a[1].inputTokens + a[1].outputTokens)
   )
-  // 最近请求倒序（最新的在前）
-  const recentRequests = [...data.recentRequests].reverse().slice(0, 50)
+  // 最近请求倒序（最新的在前），前端分页
+  const allRequests = [...data.recentRequests].reverse()
+  const totalPages = Math.max(1, Math.ceil(allRequests.length / pageSize))
+  const safePage = Math.min(currentPage, totalPages)
+  const recentRequests = allRequests.slice((safePage - 1) * pageSize, safePage * pageSize)
 
   return (
     <div className="space-y-3 sm:space-y-4">
@@ -203,9 +211,9 @@ export function TokenUsagePanel() {
         <CardHeader className="pb-2 sm:pb-3 px-3 sm:px-6">
           <CardTitle className="text-xs sm:text-sm font-medium">
             最近请求
-            {recentRequests.length > 0 && (
+            {allRequests.length > 0 && (
               <span className="text-muted-foreground font-normal ml-1 sm:ml-2">
-                （最近 {recentRequests.length} 条）
+                （共 {allRequests.length} 条）
               </span>
             )}
           </CardTitle>
@@ -214,6 +222,7 @@ export function TokenUsagePanel() {
           {recentRequests.length === 0 ? (
             <p className="text-sm text-muted-foreground">暂无请求记录</p>
           ) : (
+            <>
             <div className="overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0">
               <table className="w-full text-[11px] sm:text-sm">
                 <thead>
@@ -251,6 +260,49 @@ export function TokenUsagePanel() {
                 </tbody>
               </table>
             </div>
+            {/* 分页控件 */}
+            {allRequests.length > 0 && (
+              <div className="flex items-center justify-between pt-3 border-t mt-3">
+                <span className="text-xs text-muted-foreground">
+                  第 {(safePage - 1) * pageSize + 1}-{Math.min(safePage * pageSize, allRequests.length)} 条，共 {allRequests.length} 条
+                </span>
+                <div className="flex items-center gap-2">
+                  <select
+                    className="h-7 text-xs border rounded px-1 bg-background"
+                    value={pageSize}
+                    onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1) }}
+                  >
+                    {PAGE_SIZE_OPTIONS.map(n => (
+                      <option key={n} value={n}>{n} 条/页</option>
+                    ))}
+                  </select>
+                  {totalPages > 1 && (
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 w-7 p-0"
+                        disabled={safePage <= 1}
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      >
+                        <ChevronLeft className="h-3.5 w-3.5" />
+                      </Button>
+                      <span className="text-xs px-2">{safePage} / {totalPages}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 w-7 p-0"
+                        disabled={safePage >= totalPages}
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      >
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            </>
           )}
         </CardContent>
       </Card>
