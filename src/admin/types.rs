@@ -30,6 +30,8 @@ pub struct CredentialStatusItem {
     pub disabled: bool,
     /// 连续失败次数
     pub failure_count: u32,
+    /// 累计失败次数
+    pub total_failure_count: u64,
     /// 是否为当前活跃凭据
     pub is_current: bool,
     /// Token 过期时间（RFC3339 格式）

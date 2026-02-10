@@ -70,6 +70,7 @@ impl AdminService {
                 priority: entry.priority,
                 disabled: entry.disabled,
                 failure_count: entry.failure_count,
+                total_failure_count: entry.total_failure_count,
                 is_current: entry.id == snapshot.current_id,
                 expires_at: entry.expires_at,
                 auth_method: entry.auth_method,
