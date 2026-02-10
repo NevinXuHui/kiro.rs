@@ -11,6 +11,7 @@ import { BalanceDialog } from '@/components/balance-dialog'
 import { AddCredentialDialog } from '@/components/add-credential-dialog'
 import { BatchImportDialog } from '@/components/batch-import-dialog'
 import { BatchVerifyDialog, type VerifyResult } from '@/components/batch-verify-dialog'
+import { TokenUsagePanel } from '@/components/token-usage-panel'
 import { useCredentials, useDeleteCredential, useResetFailure, useLoadBalancingMode, useSetLoadBalancingMode } from '@/hooks/use-credentials'
 import { getCredentialBalance } from '@/api/credentials'
 import { extractErrorMessage } from '@/lib/utils'
@@ -555,6 +556,11 @@ export function Dashboard({ onLogout }: DashboardProps) {
               </div>
             </CardContent>
           </Card>
+        </div>
+
+        {/* Token 使用统计 */}
+        <div className="mb-6">
+          <TokenUsagePanel />
         </div>
 
         {/* 凭据列表 */}

@@ -104,3 +104,8 @@ function parseNestedErrorMessage(message: string): { title: string; detail?: str
 
   return { title: message }
 }
+
+// 格式化数字（千分位分隔符）
+export function formatNumber(num: number): string {
+  return num.toLocaleString('zh-CN')
+}

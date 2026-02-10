@@ -75,3 +75,29 @@ export interface AddCredentialResponse {
   credentialId: number
   email?: string
 }
+
+// Token 使用统计 - 分组统计
+export interface GroupTokenStats {
+  inputTokens: number
+  outputTokens: number
+  requests: number
+}
+
+// Token 使用统计 - 单条请求记录
+export interface TokenUsageRecord {
+  timestamp: string
+  model: string
+  credentialId: number
+  inputTokens: number
+  outputTokens: number
+}
+
+// Token 使用统计响应
+export interface TokenUsageResponse {
+  totalInputTokens: number
+  totalOutputTokens: number
+  totalRequests: number
+  byCredential: Record<string, GroupTokenStats>
+  byModel: Record<string, GroupTokenStats>
+  recentRequests: TokenUsageRecord[]
+}

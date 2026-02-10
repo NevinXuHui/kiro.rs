@@ -1119,6 +1119,12 @@ impl BufferedStreamContext {
         self.event_buffer.extend(events);
     }
 
+    /// 获取当前的 token 统计信息（用于 token 使用量追踪）
+    pub fn token_stats(&self) -> (i32, i32) {
+        let final_input = self.inner.context_input_tokens.unwrap_or(self.inner.input_tokens);
+        (final_input, self.inner.output_tokens)
+    }
+
     /// 完成流处理并返回所有事件
     ///
     /// 此方法会：

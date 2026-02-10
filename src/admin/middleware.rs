@@ -13,6 +13,7 @@ use axum::{
 use super::service::AdminService;
 use super::types::AdminErrorResponse;
 use crate::common::auth;
+use crate::token_usage::TokenUsageTracker;
 
 /// Admin API 共享状态
 #[derive(Clone)]
@@ -21,6 +22,8 @@ pub struct AdminState {
     pub admin_api_key: String,
     /// Admin 服务
     pub service: Arc<AdminService>,
+    /// Token 使用量追踪器
+    pub token_usage_tracker: Option<Arc<TokenUsageTracker>>,
 }
 
 impl AdminState {
@@ -28,7 +31,13 @@ impl AdminState {
         Self {
             admin_api_key: admin_api_key.into(),
             service: Arc::new(service),
+            token_usage_tracker: None,
         }
+    }
+
+    pub fn with_token_usage_tracker(mut self, tracker: Arc<TokenUsageTracker>) -> Self {
+        self.token_usage_tracker = Some(tracker);
+        self
     }
 }
 

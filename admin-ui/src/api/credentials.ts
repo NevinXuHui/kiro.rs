@@ -8,6 +8,7 @@ import type {
   SetPriorityRequest,
   AddCredentialRequest,
   AddCredentialResponse,
+  TokenUsageResponse,
 } from '@/types/api'
 
 // 创建 axios 实例
@@ -94,5 +95,17 @@ export async function getLoadBalancingMode(): Promise<{ mode: 'priority' | 'bala
 // 设置负载均衡模式
 export async function setLoadBalancingMode(mode: 'priority' | 'balanced'): Promise<{ mode: 'priority' | 'balanced' }> {
   const { data } = await api.put<{ mode: 'priority' | 'balanced' }>('/config/load-balancing', { mode })
+  return data
+}
+
+// 获取 token 使用统计
+export async function getTokenUsage(): Promise<TokenUsageResponse> {
+  const { data } = await api.get<TokenUsageResponse>('/token-usage')
+  return data
+}
+
+// 重置 token 使用统计
+export async function resetTokenUsage(): Promise<SuccessResponse> {
+  const { data } = await api.post<SuccessResponse>('/token-usage/reset')
   return data
 }

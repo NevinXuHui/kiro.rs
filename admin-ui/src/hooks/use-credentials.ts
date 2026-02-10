@@ -9,6 +9,8 @@ import {
   deleteCredential,
   getLoadBalancingMode,
   setLoadBalancingMode,
+  getTokenUsage,
+  resetTokenUsage,
 } from '@/api/credentials'
 import type { AddCredentialRequest } from '@/types/api'
 
@@ -103,6 +105,26 @@ export function useSetLoadBalancingMode() {
     mutationFn: setLoadBalancingMode,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['loadBalancingMode'] })
+    },
+  })
+}
+
+// 查询 token 使用统计
+export function useTokenUsage() {
+  return useQuery({
+    queryKey: ['tokenUsage'],
+    queryFn: getTokenUsage,
+    refetchInterval: 10000, // 每 10 秒刷新一次
+  })
+}
+
+// 重置 token 使用统计
+export function useResetTokenUsage() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: resetTokenUsage,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tokenUsage'] })
     },
   })
 }

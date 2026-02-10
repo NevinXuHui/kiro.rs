@@ -6,6 +6,7 @@ mod http_client;
 mod kiro;
 mod model;
 pub mod token;
+pub mod token_usage;
 
 use std::sync::Arc;
 
@@ -108,11 +109,17 @@ async fn main() {
         tls_backend: config.tls_backend,
     });
 
+    // 创建 Token 使用量追踪器
+    let token_usage_tracker = Arc::new(token_usage::TokenUsageTracker::new(
+        token_manager.cache_dir().map(|d| d.to_path_buf()),
+    ));
+
     // 构建 Anthropic API 路由（从第一个凭据获取 profile_arn）
     let anthropic_app = anthropic::create_router_with_provider(
         &api_key,
         Some(kiro_provider),
         first_credentials.profile_arn.clone(),
+        Some(token_usage_tracker.clone()),
     );
 
     // 构建 Admin API 路由（如果配置了非空的 admin_api_key）
@@ -129,7 +136,8 @@ async fn main() {
             anthropic_app
         } else {
             let admin_service = admin::AdminService::new(token_manager.clone());
-            let admin_state = admin::AdminState::new(admin_key, admin_service);
+            let admin_state = admin::AdminState::new(admin_key, admin_service)
+                .with_token_usage_tracker(token_usage_tracker.clone());
             let admin_app = admin::create_admin_router(admin_state);
 
             // 创建 Admin UI 路由
@@ -160,6 +168,8 @@ async fn main() {
         tracing::info!("  POST /api/admin/credentials/:index/priority");
         tracing::info!("  POST /api/admin/credentials/:index/reset");
         tracing::info!("  GET  /api/admin/credentials/:index/balance");
+        tracing::info!("  GET  /api/admin/token-usage");
+        tracing::info!("  POST /api/admin/token-usage/reset");
         tracing::info!("Admin UI:");
         tracing::info!("  GET  /admin");
     }

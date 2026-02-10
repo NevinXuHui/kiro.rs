@@ -124,3 +124,38 @@ pub async fn set_load_balancing_mode(
         Err(e) => (e.status_code(), Json(e.into_response())).into_response(),
     }
 }
+
+/// GET /api/admin/token-usage
+/// 获取 token 使用统计
+pub async fn get_token_usage(State(state): State<AdminState>) -> impl IntoResponse {
+    match &state.token_usage_tracker {
+        Some(tracker) => Json(tracker.get_stats()).into_response(),
+        None => (
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            Json(super::types::AdminErrorResponse::new(
+                "service_unavailable",
+                "Token usage tracking is not enabled",
+            )),
+        )
+            .into_response(),
+    }
+}
+
+/// POST /api/admin/token-usage/reset
+/// 重置 token 使用统计
+pub async fn reset_token_usage(State(state): State<AdminState>) -> impl IntoResponse {
+    match &state.token_usage_tracker {
+        Some(tracker) => {
+            tracker.reset();
+            Json(super::types::SuccessResponse::new("Token 使用统计已重置")).into_response()
+        }
+        None => (
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            Json(super::types::AdminErrorResponse::new(
+                "service_unavailable",
+                "Token usage tracking is not enabled",
+            )),
+        )
+            .into_response(),
+    }
+}
