@@ -44,7 +44,9 @@ pub struct McpArguments {
 #[derive(Debug, Deserialize)]
 pub struct McpResponse {
     pub error: Option<McpError>,
+    #[allow(dead_code)]
     pub id: String,
+    #[allow(dead_code)]
     pub jsonrpc: String,
     pub result: Option<McpResult>,
 }
@@ -61,6 +63,7 @@ pub struct McpError {
 pub struct McpResult {
     pub content: Vec<McpContent>,
     #[serde(rename = "isError")]
+    #[allow(dead_code)]
     pub is_error: bool,
 }
 
@@ -77,8 +80,11 @@ pub struct McpContent {
 pub struct WebSearchResults {
     pub results: Vec<WebSearchResult>,
     #[serde(rename = "totalResults")]
+    #[allow(dead_code)]
     pub total_results: Option<i32>,
+    #[allow(dead_code)]
     pub query: Option<String>,
+    #[allow(dead_code)]
     pub error: Option<String>,
 }
 
@@ -89,12 +95,17 @@ pub struct WebSearchResult {
     pub url: String,
     pub snippet: Option<String>,
     #[serde(rename = "publishedDate")]
+    #[allow(dead_code)]
     pub published_date: Option<i64>,
+    #[allow(dead_code)]
     pub id: Option<String>,
+    #[allow(dead_code)]
     pub domain: Option<String>,
     #[serde(rename = "maxVerbatimWordLimit")]
+    #[allow(dead_code)]
     pub max_verbatim_word_limit: Option<i32>,
     #[serde(rename = "publicDomain")]
+    #[allow(dead_code)]
     pub public_domain: Option<bool>,
 }
 

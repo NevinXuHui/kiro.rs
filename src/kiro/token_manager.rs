@@ -27,6 +27,7 @@ use crate::model::config::Config;
 /// Token 管理器
 ///
 /// 负责管理凭据和 Token 的自动刷新
+#[allow(dead_code)]
 pub struct TokenManager {
     config: Config,
     credentials: KiroCredentials,
@@ -35,6 +36,7 @@ pub struct TokenManager {
 
 impl TokenManager {
     /// 创建新的 TokenManager 实例
+    #[allow(dead_code)]
     pub fn new(config: Config, credentials: KiroCredentials, proxy: Option<ProxyConfig>) -> Self {
         Self {
             config,
@@ -44,11 +46,13 @@ impl TokenManager {
     }
 
     /// 获取凭据的引用
+    #[allow(dead_code)]
     pub fn credentials(&self) -> &KiroCredentials {
         &self.credentials
     }
 
     /// 获取配置的引用
+    #[allow(dead_code)]
     pub fn config(&self) -> &Config {
         &self.config
     }
@@ -56,6 +60,7 @@ impl TokenManager {
     /// 确保获取有效的访问 Token
     ///
     /// 如果 Token 过期或即将过期，会自动刷新
+    #[allow(dead_code)]
     pub async fn ensure_valid_token(&mut self) -> anyhow::Result<String> {
         if is_token_expired(&self.credentials) || is_token_expiring_soon(&self.credentials) {
             self.credentials =
@@ -76,6 +81,7 @@ impl TokenManager {
     /// 获取使用额度信息
     ///
     /// 调用 getUsageLimits API 查询当前账户的使用额度
+    #[allow(dead_code)]
     pub async fn get_usage_limits(&mut self) -> anyhow::Result<UsageLimitsResponse> {
         let token = self.ensure_valid_token().await?;
         get_usage_limits(&self.credentials, &self.config, &token, self.proxy.as_ref()).await
@@ -622,6 +628,7 @@ impl MultiTokenManager {
     }
 
     /// 获取当前活动凭据的克隆
+    #[allow(dead_code)]
     pub fn credentials(&self) -> KiroCredentials {
         let entries = self.entries.lock();
         let current_id = *self.current_id.lock();
@@ -1193,6 +1200,7 @@ impl MultiTokenManager {
     }
 
     /// 获取使用额度信息
+    #[allow(dead_code)]
     pub async fn get_usage_limits(&self) -> anyhow::Result<UsageLimitsResponse> {
         let ctx = self.acquire_context().await?;
         get_usage_limits(
