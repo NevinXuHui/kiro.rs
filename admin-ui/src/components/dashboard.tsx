@@ -493,7 +493,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
         <div className="container flex h-14 items-center justify-between px-4 md:px-8">
           <div className="flex items-center gap-2">
             <Server className="h-5 w-5" />
-            <span className="font-semibold">Kiro Admin</span>
+            <span className="font-semibold">Claude Admin</span>
           </div>
           <div className="flex items-center gap-2">
             <Button
