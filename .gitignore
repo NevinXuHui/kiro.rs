@@ -23,7 +23,7 @@
 
 # 工作流配置
 /.spec-workflow/
-/.omc/
+.omc/
 
 # 敏感信息
 /kiro-credentials.json
