@@ -174,6 +174,19 @@ else
     fi
 fi
 
+# 杀掉已有的 kiro-rs 进程
+if pgrep -x kiro-rs > /dev/null 2>&1; then
+    echo -e "${YELLOW}==> 检测到已运行的 kiro-rs 进程，正在终止...${NC}"
+    pkill -x kiro-rs
+    sleep 1
+    # 如果还没退出，强制杀掉
+    if pgrep -x kiro-rs > /dev/null 2>&1; then
+        pkill -9 -x kiro-rs
+        sleep 0.5
+    fi
+    echo -e "${GREEN}✓ 旧进程已终止${NC}"
+fi
+
 # 运行服务
 echo -e "${GREEN}==> 启动 kiro-rs 服务...${NC}"
 echo -e "${YELLOW}配置文件: $CONFIG_FILE${NC}"
