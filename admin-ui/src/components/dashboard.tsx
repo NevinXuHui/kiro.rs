@@ -13,6 +13,9 @@ import { BatchImportDialog } from '@/components/batch-import-dialog'
 import { BatchVerifyDialog, type VerifyResult } from '@/components/batch-verify-dialog'
 import { TokenUsagePanel } from '@/components/token-usage-panel'
 import { ApiKeyPanel } from '@/components/api-key-panel'
+import { ProxySettingsPanel } from '@/components/proxy-settings-panel'
+import { ConnectivityTestPanel } from '@/components/connectivity-test-panel'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useCredentials, useDeleteCredential, useResetFailure, useLoadBalancingMode, useSetLoadBalancingMode } from '@/hooks/use-credentials'
 import { getCredentialBalance } from '@/api/credentials'
 import { extractErrorMessage } from '@/lib/utils'
@@ -494,27 +497,28 @@ export function Dashboard({ onLogout }: DashboardProps) {
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-14 items-center justify-between px-4 md:px-8">
           <div className="flex items-center gap-2">
-            <Server className="h-5 w-5" />
-            <span className="font-semibold">Claude Admin</span>
+            <Server className="h-4 w-4 md:h-5 md:w-5" />
+            <span className="font-semibold text-sm md:text-base">Claude Admin</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 md:gap-2">
             <Button
               variant="outline"
               size="sm"
               onClick={handleToggleLoadBalancing}
               disabled={isLoadingMode || isSettingMode}
               title="切换负载均衡模式"
+              className="hidden sm:flex"
             >
-              {isLoadingMode ? '加载中...' : (loadBalancingData?.mode === 'priority' ? '优先级模式' : '均衡负载')}
+              {isLoadingMode ? '加载中...' : (loadBalancingData?.mode === 'priority' ? '优先级' : '均衡')}
             </Button>
-            <Button variant="ghost" size="icon" onClick={toggleDarkMode}>
-              {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            <Button variant="ghost" size="icon" className="h-8 w-8 md:h-10 md:w-10" onClick={toggleDarkMode}>
+              {darkMode ? <Sun className="h-4 w-4 md:h-5 md:w-5" /> : <Moon className="h-4 w-4 md:h-5 md:w-5" />}
             </Button>
-            <Button variant="ghost" size="icon" onClick={handleRefresh}>
-              <RefreshCw className="h-5 w-5" />
+            <Button variant="ghost" size="icon" className="h-8 w-8 md:h-10 md:w-10" onClick={handleRefresh}>
+              <RefreshCw className="h-4 w-4 md:h-5 md:w-5" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={handleLogout}>
-              <LogOut className="h-5 w-5" />
+            <Button variant="ghost" size="icon" className="h-8 w-8 md:h-10 md:w-10" onClick={handleLogout}>
+              <LogOut className="h-4 w-4 md:h-5 md:w-5" />
             </Button>
           </div>
         </div>
@@ -523,76 +527,77 @@ export function Dashboard({ onLogout }: DashboardProps) {
       {/* 主内容 */}
       <main className="container mx-auto px-4 md:px-8 py-6">
         {/* 统计卡片 */}
-        <div className="grid gap-4 md:grid-cols-3 mb-6">
+        <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-6">
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
+            <CardHeader className="pb-1 sm:pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
                 凭据总数
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{data?.total || 0}</div>
+            <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
+              <div className="text-xl sm:text-2xl font-bold">{data?.total || 0}</div>
             </CardContent>
           </Card>
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
+            <CardHeader className="pb-1 sm:pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
                 可用凭据
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">{data?.available || 0}</div>
+            <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
+              <div className="text-xl sm:text-2xl font-bold text-green-600">{data?.available || 0}</div>
             </CardContent>
           </Card>
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
+            <CardHeader className="pb-1 sm:pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
                 当前活跃
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold flex items-center gap-2">
+            <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
+              <div className="text-xl sm:text-2xl font-bold flex items-center gap-1 sm:gap-2">
                 #{data?.currentId || '-'}
-                <Badge variant="success">活跃</Badge>
+                <Badge variant="success" className="text-[10px] sm:text-xs">活跃</Badge>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Token 使用统计 */}
-        <div className="mb-6">
-          <TokenUsagePanel />
-        </div>
+        {/* Tab 切换面板 */}
+        <Tabs defaultValue="credentials" className="space-y-4">
+          <TabsList className="w-full justify-start overflow-x-auto">
+            <TabsTrigger value="credentials">凭据</TabsTrigger>
+            <TabsTrigger value="tokens">Token</TabsTrigger>
+            <TabsTrigger value="apikeys">Key</TabsTrigger>
+            <TabsTrigger value="connectivity">测试</TabsTrigger>
+            <TabsTrigger value="settings">设置</TabsTrigger>
+          </TabsList>
 
-        {/* API Key 管理 */}
-        <div className="mb-6">
-          <ApiKeyPanel />
-        </div>
-
-        {/* 凭据列表 */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          {/* 凭据管理 */}
+          <TabsContent value="credentials">
+            <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-4">
-              <h2 className="text-xl font-semibold">凭据管理</h2>
+              <h2 className="text-lg md:text-xl font-semibold">凭据管理</h2>
               {selectedIds.size > 0 && (
                 <div className="flex items-center gap-2">
-                  <Badge variant="secondary">已选择 {selectedIds.size} 个</Badge>
-                  <Button onClick={deselectAll} size="sm" variant="ghost">
-                    取消选择
+                  <Badge variant="secondary" className="text-xs">已选 {selectedIds.size}</Badge>
+                  <Button onClick={deselectAll} size="sm" variant="ghost" className="h-7 px-2 text-xs">
+                    取消
                   </Button>
                 </div>
               )}
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {selectedIds.size > 0 && (
                 <>
-                  <Button onClick={handleBatchVerify} size="sm" variant="outline">
-                    <CheckCircle2 className="h-4 w-4 mr-2" />
-                    批量验活
+                  <Button onClick={handleBatchVerify} size="sm" variant="outline" className="h-8 text-xs">
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    <span className="hidden sm:inline">批量</span>验活
                   </Button>
-                  <Button onClick={handleBatchResetFailure} size="sm" variant="outline">
-                    <RotateCcw className="h-4 w-4 mr-2" />
-                    恢复异常
+                  <Button onClick={handleBatchResetFailure} size="sm" variant="outline" className="h-8 text-xs">
+                    <RotateCcw className="h-3 w-3 mr-1" />
+                    <span className="hidden sm:inline">恢复</span>异常
                   </Button>
                   <Button
                     onClick={handleBatchDelete}
@@ -600,16 +605,17 @@ export function Dashboard({ onLogout }: DashboardProps) {
                     variant="destructive"
                     disabled={selectedDisabledCount === 0}
                     title={selectedDisabledCount === 0 ? '只能删除已禁用凭据' : undefined}
+                    className="h-8 text-xs"
                   >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    批量删除
+                    <Trash2 className="h-3 w-3 mr-1" />
+                    删除
                   </Button>
                 </>
               )}
               {verifying && !verifyDialogOpen && (
-                <Button onClick={() => setVerifyDialogOpen(true)} size="sm" variant="secondary">
-                  <CheckCircle2 className="h-4 w-4 mr-2 animate-spin" />
-                  验活中... {verifyProgress.current}/{verifyProgress.total}
+                <Button onClick={() => setVerifyDialogOpen(true)} size="sm" variant="secondary" className="h-8 text-xs">
+                  <CheckCircle2 className="h-3 w-3 mr-1 animate-spin" />
+                  验活中 {verifyProgress.current}/{verifyProgress.total}
                 </Button>
               )}
               {data?.credentials && data.credentials.length > 0 && (
@@ -618,9 +624,10 @@ export function Dashboard({ onLogout }: DashboardProps) {
                   size="sm"
                   variant="outline"
                   disabled={queryingInfo}
+                  className="h-8 text-xs"
                 >
-                  <RefreshCw className={`h-4 w-4 mr-2 ${queryingInfo ? 'animate-spin' : ''}`} />
-                  {queryingInfo ? `查询中... ${queryInfoProgress.current}/${queryInfoProgress.total}` : '查询信息'}
+                  <RefreshCw className={`h-3 w-3 mr-1 ${queryingInfo ? 'animate-spin' : ''}`} />
+                  {queryingInfo ? `${queryInfoProgress.current}/${queryInfoProgress.total}` : '查询'}
                 </Button>
               )}
               {data?.credentials && data.credentials.length > 0 && (
@@ -628,21 +635,21 @@ export function Dashboard({ onLogout }: DashboardProps) {
                   onClick={handleClearAll}
                   size="sm"
                   variant="outline"
-                  className="text-destructive hover:text-destructive"
+                  className="text-destructive hover:text-destructive h-8 text-xs hidden sm:flex"
                   disabled={disabledCredentialCount === 0}
                   title={disabledCredentialCount === 0 ? '没有可清除的已禁用凭据' : undefined}
                 >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  清除已禁用
+                  <Trash2 className="h-3 w-3 mr-1" />
+                  清除
                 </Button>
               )}
-              <Button onClick={() => setBatchImportDialogOpen(true)} size="sm" variant="outline">
-                <Upload className="h-4 w-4 mr-2" />
-                批量导入
+              <Button onClick={() => setBatchImportDialogOpen(true)} size="sm" variant="outline" className="h-8 text-xs">
+                <Upload className="h-3 w-3 mr-1" />
+                <span className="hidden sm:inline">批量</span>导入
               </Button>
-              <Button onClick={() => setAddDialogOpen(true)} size="sm">
-                <Plus className="h-4 w-4 mr-2" />
-                添加凭据
+              <Button onClick={() => setAddDialogOpen(true)} size="sm" className="h-8 text-xs">
+                <Plus className="h-3 w-3 mr-1" />
+                添加
               </Button>
             </div>
           </div>
@@ -654,10 +661,10 @@ export function Dashboard({ onLogout }: DashboardProps) {
             </Card>
           ) : (
             <>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <div className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-4 -mx-4 px-4 md:mx-0 md:px-0 md:grid md:grid-cols-2 lg:grid-cols-3 md:overflow-x-visible md:snap-none md:pb-0">
                 {currentCredentials.map((credential) => (
+                  <div key={credential.id} className="min-w-[calc(100vw-2rem)] snap-center md:min-w-0">
                   <CredentialCard
-                    key={credential.id}
                     credential={credential}
                     onViewBalance={handleViewBalance}
                     selected={selectedIds.has(credential.id)}
@@ -665,28 +672,31 @@ export function Dashboard({ onLogout }: DashboardProps) {
                     balance={balanceMap.get(credential.id) || null}
                     loadingBalance={loadingBalanceIds.has(credential.id)}
                   />
+                  </div>
                 ))}
               </div>
 
               {/* 分页控件 */}
               {totalPages > 1 && (
-                <div className="flex justify-center items-center gap-4 mt-6">
+                <div className="flex flex-col sm:flex-row justify-center items-center gap-2 sm:gap-4 mt-6">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                     disabled={currentPage === 1}
+                    className="w-full sm:w-auto"
                   >
                     上一页
                   </Button>
-                  <span className="text-sm text-muted-foreground">
-                    第 {currentPage} / {totalPages} 页（共 {data?.credentials.length} 个凭据）
+                  <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
+                    {currentPage} / {totalPages} 页（共 {data?.credentials.length} 个）
                   </span>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                     disabled={currentPage === totalPages}
+                    className="w-full sm:w-auto"
                   >
                     下一页
                   </Button>
@@ -695,6 +705,28 @@ export function Dashboard({ onLogout }: DashboardProps) {
             </>
           )}
         </div>
+          </TabsContent>
+
+          {/* Token 使用统计 */}
+          <TabsContent value="tokens">
+            <TokenUsagePanel />
+          </TabsContent>
+
+          {/* API Key 管理 */}
+          <TabsContent value="apikeys">
+            <ApiKeyPanel />
+          </TabsContent>
+
+          {/* 设置 */}
+          <TabsContent value="settings">
+            <ProxySettingsPanel />
+          </TabsContent>
+
+          {/* 连通性测试 */}
+          <TabsContent value="connectivity">
+            <ConnectivityTestPanel />
+          </TabsContent>
+        </Tabs>
       </main>
 
       {/* 余额对话框 */}

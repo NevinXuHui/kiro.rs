@@ -235,17 +235,17 @@ export function ApiKeyPanel() {
                         )}
                       </div>
                       <div className="text-sm text-muted-foreground space-y-1">
-                        <div className="flex items-center gap-2">
-                          <code className="bg-muted px-1.5 py-0.5 rounded text-xs">{apiKey.key}</code>
-                          <span className="text-xs">({apiKey.keyLength} 字符)</span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">{apiKey.key}</code>
+                          <span className="text-xs whitespace-nowrap">({apiKey.keyLength} 字符)</span>
                         </div>
                         {apiKey.allowedModels && apiKey.allowedModels.length > 0 && (
-                          <div className="text-xs">
+                          <div className="text-xs break-words">
                             模型白名单: {apiKey.allowedModels.join(', ')}
                           </div>
                         )}
                         {stats && (
-                          <div className="flex items-center gap-3 text-xs">
+                          <div className="flex items-center gap-2 sm:gap-3 text-xs flex-wrap">
                             <div className="flex items-center gap-1">
                               <ArrowDownToLine className="h-3 w-3 text-blue-600" />
                               <span className="text-blue-600">{formatNumber(stats.inputTokens)}</span>
@@ -254,8 +254,8 @@ export function ApiKeyPanel() {
                               <ArrowUpFromLine className="h-3 w-3 text-green-600" />
                               <span className="text-green-600">{formatNumber(stats.outputTokens)}</span>
                             </div>
-                            <span>总计: {formatNumber(totalTokens)} tokens</span>
-                            <span>({stats.requests} 次请求)</span>
+                            <span className="whitespace-nowrap">总计: {formatNumber(totalTokens)} tokens</span>
+                            <span className="whitespace-nowrap">({stats.requests} 次)</span>
                           </div>
                         )}
                         <div className="text-xs">

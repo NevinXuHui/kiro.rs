@@ -1,4 +1,4 @@
-import { BarChart3, RotateCcw, ArrowDownToLine, ArrowUpFromLine, Hash, Loader2 } from 'lucide-react'
+import { BarChart3, RotateCcw, RefreshCw, ArrowDownToLine, ArrowUpFromLine, Hash, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -7,7 +7,7 @@ import { useTokenUsage, useResetTokenUsage, useApiKeys } from '@/hooks/use-crede
 import { formatNumber } from '@/lib/utils'
 
 export function TokenUsagePanel() {
-  const { data, isLoading, error } = useTokenUsage()
+  const { data, isLoading, error, refetch, isFetching } = useTokenUsage()
   const { data: apiKeys } = useApiKeys()
   const resetMutation = useResetTokenUsage()
 
@@ -54,9 +54,9 @@ export function TokenUsagePanel() {
   const recentRequests = [...data.recentRequests].reverse().slice(0, 50)
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 sm:space-y-4">
       {/* 标题栏 */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div className="flex items-center gap-2">
           <BarChart3 className="h-5 w-5 text-muted-foreground" />
           <h2 className="text-lg font-semibold">Token 使用统计</h2>
@@ -64,87 +64,100 @@ export function TokenUsagePanel() {
             每 10s 刷新
           </Badge>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleReset}
-          disabled={resetMutation.isPending || data.totalRequests === 0}
-        >
-          <RotateCcw className="h-4 w-4 mr-1" />
-          重置统计
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="h-8 text-xs"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 mr-1 ${isFetching ? 'animate-spin' : ''}`} />
+            刷新
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleReset}
+            disabled={resetMutation.isPending || data.totalRequests === 0}
+            className="h-8 text-xs"
+          >
+            <RotateCcw className="h-3.5 w-3.5 mr-1" />
+            重置
+          </Button>
+        </div>
       </div>
 
-      {/* 总计卡片 */}
-      <div className="grid gap-4 md:grid-cols-4">
+      {/* 总计卡片 - 手机 2x2，桌面 4 列 */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4">
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-              <Hash className="h-3.5 w-3.5" />
+          <CardHeader className="pb-1 sm:pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground flex items-center gap-1">
+              <Hash className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
               总请求数
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatNumber(data.totalRequests)}</div>
+          <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
+            <div className="text-xl sm:text-2xl font-bold">{formatNumber(data.totalRequests)}</div>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-              <ArrowDownToLine className="h-3.5 w-3.5" />
+          <CardHeader className="pb-1 sm:pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground flex items-center gap-1">
+              <ArrowDownToLine className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
               输入 Tokens
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{formatNumber(data.totalInputTokens)}</div>
+          <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
+            <div className="text-xl sm:text-2xl font-bold text-blue-600">{formatNumber(data.totalInputTokens)}</div>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-              <ArrowUpFromLine className="h-3.5 w-3.5" />
+          <CardHeader className="pb-1 sm:pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground flex items-center gap-1">
+              <ArrowUpFromLine className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
               输出 Tokens
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{formatNumber(data.totalOutputTokens)}</div>
+          <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
+            <div className="text-xl sm:text-2xl font-bold text-green-600">{formatNumber(data.totalOutputTokens)}</div>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+          <CardHeader className="pb-1 sm:pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
               总 Tokens
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatNumber(totalTokens)}</div>
+          <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
+            <div className="text-xl sm:text-2xl font-bold">{formatNumber(totalTokens)}</div>
           </CardContent>
         </Card>
       </div>
 
-      {/* 按模型分组 + 按凭据分组 并排 */}
-      <div className="grid gap-4 md:grid-cols-2">
+      {/* 按模型分组 + 按凭据分组 */}
+      <div className="grid gap-2 sm:gap-4 md:grid-cols-2">
         {/* 按模型分组 */}
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">按模型分组</CardTitle>
+          <CardHeader className="pb-2 sm:pb-3 px-3 sm:px-6">
+            <CardTitle className="text-xs sm:text-sm font-medium">按模型分组</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-3 sm:px-6">
             {modelEntries.length === 0 ? (
               <p className="text-sm text-muted-foreground">暂无数据</p>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2 sm:space-y-3">
                 {modelEntries.map(([model, stats]) => (
-                  <div key={model} className="flex items-center justify-between text-sm">
+                  <div key={model} className="flex items-center justify-between text-xs sm:text-sm">
                     <div className="flex-1 min-w-0">
                       <div className="font-medium truncate" title={model}>{model}</div>
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-[10px] sm:text-xs text-muted-foreground">
                         <span className="text-blue-600">{formatNumber(stats.inputTokens)} in</span>
                         {' / '}
                         <span className="text-green-600">{formatNumber(stats.outputTokens)} out</span>
                       </div>
                     </div>
-                    <Badge variant="outline" className="ml-2 shrink-0">
+                    <Badge variant="outline" className="ml-2 shrink-0 text-[10px] sm:text-xs">
                       {stats.requests} 次
                     </Badge>
                   </div>
@@ -156,25 +169,25 @@ export function TokenUsagePanel() {
 
         {/* 按凭据分组 */}
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">按凭据分组</CardTitle>
+          <CardHeader className="pb-2 sm:pb-3 px-3 sm:px-6">
+            <CardTitle className="text-xs sm:text-sm font-medium">按凭据分组</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-3 sm:px-6">
             {credentialEntries.length === 0 ? (
               <p className="text-sm text-muted-foreground">暂无数据</p>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2 sm:space-y-3">
                 {credentialEntries.map(([id, stats]) => (
-                  <div key={id} className="flex items-center justify-between text-sm">
+                  <div key={id} className="flex items-center justify-between text-xs sm:text-sm">
                     <div className="flex-1 min-w-0">
                       <div className="font-medium">凭据 #{id}</div>
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-[10px] sm:text-xs text-muted-foreground">
                         <span className="text-blue-600">{formatNumber(stats.inputTokens)} in</span>
                         {' / '}
                         <span className="text-green-600">{formatNumber(stats.outputTokens)} out</span>
                       </div>
                     </div>
-                    <Badge variant="outline" className="ml-2 shrink-0">
+                    <Badge variant="outline" className="ml-2 shrink-0 text-[10px] sm:text-xs">
                       {stats.requests} 次
                     </Badge>
                   </div>
@@ -187,30 +200,30 @@ export function TokenUsagePanel() {
 
       {/* 最近请求列表 */}
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium">
+        <CardHeader className="pb-2 sm:pb-3 px-3 sm:px-6">
+          <CardTitle className="text-xs sm:text-sm font-medium">
             最近请求
             {recentRequests.length > 0 && (
-              <span className="text-muted-foreground font-normal ml-2">
+              <span className="text-muted-foreground font-normal ml-1 sm:ml-2">
                 （最近 {recentRequests.length} 条）
               </span>
             )}
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-3 sm:px-6">
           {recentRequests.length === 0 ? (
             <p className="text-sm text-muted-foreground">暂无请求记录</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0">
+              <table className="w-full text-[11px] sm:text-sm">
                 <thead>
                   <tr className="border-b text-muted-foreground">
-                    <th className="text-left py-2 pr-4 font-medium">时间</th>
-                    <th className="text-left py-2 pr-4 font-medium">模型</th>
-                    <th className="text-right py-2 pr-4 font-medium">输入</th>
-                    <th className="text-right py-2 pr-4 font-medium">输出</th>
-                    <th className="text-left py-2 pr-4 font-medium">API Key</th>
-                    <th className="text-right py-2 font-medium">凭据</th>
+                    <th className="text-left py-1.5 sm:py-2 pr-2 sm:pr-4 font-medium">时间</th>
+                    <th className="text-left py-1.5 sm:py-2 pr-2 sm:pr-4 font-medium">模型</th>
+                    <th className="text-right py-1.5 sm:py-2 pr-2 sm:pr-4 font-medium">输入</th>
+                    <th className="text-right py-1.5 sm:py-2 pr-2 sm:pr-4 font-medium">输出</th>
+                    <th className="text-left py-1.5 sm:py-2 pr-1 sm:pr-2 font-medium">Key</th>
+                    <th className="text-right py-1.5 sm:py-2 font-medium hidden sm:table-cell">凭据</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -220,18 +233,18 @@ export function TokenUsagePanel() {
                     const apiKeyLabel = req.apiKeyId ? apiKeyMap.get(req.apiKeyId) : null
                     return (
                       <tr key={idx} className="border-b last:border-0">
-                        <td className="py-2 pr-4 text-muted-foreground whitespace-nowrap">{timeStr}</td>
-                        <td className="py-2 pr-4 truncate max-w-[200px]" title={req.model}>{req.model}</td>
-                        <td className="py-2 pr-4 text-right text-blue-600">{formatNumber(req.inputTokens)}</td>
-                        <td className="py-2 pr-4 text-right text-green-600">{formatNumber(req.outputTokens)}</td>
-                        <td className="py-2 pr-4">
+                        <td className="py-1.5 sm:py-2 pr-2 sm:pr-4 text-muted-foreground whitespace-nowrap">{timeStr}</td>
+                        <td className="py-1.5 sm:py-2 pr-2 sm:pr-4 truncate max-w-[80px] sm:max-w-[200px]" title={req.model}>{req.model}</td>
+                        <td className="py-1.5 sm:py-2 pr-2 sm:pr-4 text-right text-blue-600">{formatNumber(req.inputTokens)}</td>
+                        <td className="py-1.5 sm:py-2 pr-2 sm:pr-4 text-right text-green-600">{formatNumber(req.outputTokens)}</td>
+                        <td className="py-1.5 sm:py-2 pr-1 sm:pr-2">
                           {apiKeyLabel ? (
-                            <Badge variant="secondary" className="text-xs">{apiKeyLabel}</Badge>
+                            <Badge variant="secondary" className="text-[10px] sm:text-xs px-1 py-0">{apiKeyLabel}</Badge>
                           ) : (
-                            <span className="text-muted-foreground text-xs">-</span>
+                            <span className="text-muted-foreground">-</span>
                           )}
                         </td>
-                        <td className="py-2 text-right">#{req.credentialId}</td>
+                        <td className="py-1.5 sm:py-2 text-right hidden sm:table-cell">#{req.credentialId}</td>
                       </tr>
                     )
                   })}
