@@ -139,3 +139,41 @@ export interface UpdateApiKeyRequest {
   allowedModels?: string[] | null
   disabled?: boolean
 }
+
+// ============ 代理配置 ============
+
+// 代理配置响应
+export interface ProxyConfigResponse {
+  enabled: boolean
+  url: string | null
+  username: string | null
+  hasPassword: boolean
+}
+
+// 更新代理配置请求
+export interface UpdateProxyConfigRequest {
+  enabled: boolean
+  url?: string | null
+  username?: string | null
+  password?: string | null
+}
+
+// ============ 连通性测试 ============
+
+// 连通性测试请求
+export interface ConnectivityTestRequest {
+  mode: 'anthropic' | 'openai'
+}
+
+// 连通性测试响应
+export interface ConnectivityTestResponse {
+  success: boolean
+  mode: string
+  latencyMs: number
+  credentialId: number | null
+  model: string | null
+  reply: string | null
+  inputTokens: number | null
+  outputTokens: number | null
+  error: string | null
+}

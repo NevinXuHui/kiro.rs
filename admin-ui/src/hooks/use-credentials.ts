@@ -15,8 +15,11 @@ import {
   createApiKey,
   updateApiKey,
   deleteApiKey,
+  getProxyConfig,
+  updateProxyConfig,
+  testConnectivity,
 } from '@/api/credentials'
-import type { AddCredentialRequest, CreateApiKeyRequest, UpdateApiKeyRequest } from '@/types/api'
+import type { AddCredentialRequest, CreateApiKeyRequest, UpdateApiKeyRequest, UpdateProxyConfigRequest, ConnectivityTestRequest } from '@/types/api'
 
 // 查询凭据列表
 export function useCredentials() {
@@ -174,5 +177,35 @@ export function useDeleteApiKey() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['apiKeys'] })
     },
+  })
+}
+
+// ============ 代理配置 ============
+
+// 获取代理配置
+export function useProxyConfig() {
+  return useQuery({
+    queryKey: ['proxyConfig'],
+    queryFn: getProxyConfig,
+  })
+}
+
+// 更新代理配置
+export function useUpdateProxyConfig() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (req: UpdateProxyConfigRequest) => updateProxyConfig(req),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['proxyConfig'] })
+    },
+  })
+}
+
+// ============ 连通性测试 ============
+
+// 测试 API 连通性
+export function useTestConnectivity() {
+  return useMutation({
+    mutationFn: (req: ConnectivityTestRequest) => testConnectivity(req),
   })
 }

@@ -13,6 +13,10 @@ import type {
   CreateApiKeyRequest,
   CreateApiKeyResponse,
   UpdateApiKeyRequest,
+  ProxyConfigResponse,
+  UpdateProxyConfigRequest,
+  ConnectivityTestRequest,
+  ConnectivityTestResponse,
 } from '@/types/api'
 
 // 创建 axios 实例
@@ -143,5 +147,27 @@ export async function updateApiKey(id: number, req: UpdateApiKeyRequest): Promis
 // 删除 API Key
 export async function deleteApiKey(id: number): Promise<SuccessResponse> {
   const { data } = await api.delete<SuccessResponse>(`/api-keys/${id}`)
+  return data
+}
+
+// ============ 代理配置 ============
+
+// 获取代理配置
+export async function getProxyConfig(): Promise<ProxyConfigResponse> {
+  const { data } = await api.get<ProxyConfigResponse>('/config/proxy')
+  return data
+}
+
+// 更新代理配置
+export async function updateProxyConfig(req: UpdateProxyConfigRequest): Promise<ProxyConfigResponse> {
+  const { data } = await api.put<ProxyConfigResponse>('/config/proxy', req)
+  return data
+}
+
+// ============ 连通性测试 ============
+
+// 测试 API 连通性
+export async function testConnectivity(req: ConnectivityTestRequest): Promise<ConnectivityTestResponse> {
+  const { data } = await api.post<ConnectivityTestResponse>('/connectivity/test', req)
   return data
 }
