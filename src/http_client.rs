@@ -2,7 +2,10 @@
 //!
 //! 提供统一的 HTTP Client 构建功能，支持代理配置
 
+use parking_lot::RwLock;
 use reqwest::{Client, Proxy};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::model::config::TlsBackend;
@@ -35,6 +38,43 @@ impl ProxyConfig {
         self
     }
 }
+
+/// 共享代理配置（支持热更新）
+///
+/// 通过版本号追踪变更，消费方可据此判断是否需要重建 HTTP Client
+pub struct SharedProxy {
+    config: RwLock<Option<ProxyConfig>>,
+    version: AtomicU64,
+}
+
+impl SharedProxy {
+    /// 创建共享代理配置
+    pub fn new(config: Option<ProxyConfig>) -> Arc<Self> {
+        Arc::new(Self {
+            config: RwLock::new(config),
+            version: AtomicU64::new(0),
+        })
+    }
+
+    /// 读取当前代理配置
+    pub fn get(&self) -> Option<ProxyConfig> {
+        self.config.read().clone()
+    }
+
+    /// 更新代理配置（自动递增版本号）
+    pub fn set(&self, config: Option<ProxyConfig>) {
+        *self.config.write() = config;
+        self.version.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// 获取当前版本号（用于变更检测）
+    pub fn version(&self) -> u64 {
+        self.version.load(Ordering::SeqCst)
+    }
+}
+
+/// 共享代理配置类型别名
+pub type SharedProxyConfig = Arc<SharedProxy>;
 
 /// 构建 HTTP Client
 ///

@@ -15,6 +15,8 @@ use super::service::AdminService;
 use super::types::AdminErrorResponse;
 use crate::api_key_store::ApiKeyStore;
 use crate::common::auth;
+use crate::http_client::SharedProxyConfig;
+use crate::kiro::provider::KiroProvider;
 use crate::token_usage::TokenUsageTracker;
 
 /// Admin API 共享状态
@@ -28,6 +30,12 @@ pub struct AdminState {
     pub token_usage_tracker: Option<Arc<TokenUsageTracker>>,
     /// API Key 存储（共享引用，支持热更新 CRUD）
     pub api_key_store: Option<Arc<RwLock<ApiKeyStore>>>,
+    /// 共享代理配置（支持热更新）
+    pub shared_proxy: Option<SharedProxyConfig>,
+    /// KiroProvider（用于连通性测试）
+    pub kiro_provider: Option<Arc<KiroProvider>>,
+    /// Profile ARN（用于连通性测试）
+    pub profile_arn: Option<String>,
 }
 
 impl AdminState {
@@ -37,6 +45,9 @@ impl AdminState {
             service: Arc::new(service),
             token_usage_tracker: None,
             api_key_store: None,
+            shared_proxy: None,
+            kiro_provider: None,
+            profile_arn: None,
         }
     }
 
@@ -47,6 +58,21 @@ impl AdminState {
 
     pub fn with_api_key_store(mut self, store: Arc<RwLock<ApiKeyStore>>) -> Self {
         self.api_key_store = Some(store);
+        self
+    }
+
+    pub fn with_shared_proxy(mut self, proxy: SharedProxyConfig) -> Self {
+        self.shared_proxy = Some(proxy);
+        self
+    }
+
+    pub fn with_kiro_provider(mut self, provider: Arc<KiroProvider>) -> Self {
+        self.kiro_provider = Some(provider);
+        self
+    }
+
+    pub fn with_profile_arn(mut self, arn: Option<String>) -> Self {
+        self.profile_arn = arn;
         self
     }
 }

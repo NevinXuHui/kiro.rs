@@ -10,12 +10,12 @@
 use crate::anthropic::types::{
     CountTokensRequest, CountTokensResponse, Message, SystemMessage, Tool,
 };
-use crate::http_client::{ProxyConfig, build_client};
+use crate::http_client::{SharedProxyConfig, build_client};
 use crate::model::config::TlsBackend;
 use std::sync::OnceLock;
 
 /// Count Tokens API 配置
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct CountTokensConfig {
     /// 外部 count_tokens API 地址
     pub api_url: Option<String>,
@@ -24,7 +24,7 @@ pub struct CountTokensConfig {
     /// count_tokens API 认证类型（"x-api-key" 或 "bearer"）
     pub auth_type: String,
     /// 代理配置
-    pub proxy: Option<ProxyConfig>,
+    pub proxy: SharedProxyConfig,
 
     pub tls_backend: TlsBackend,
 }
@@ -146,7 +146,8 @@ async fn call_remote_count_tokens(
     messages: &Vec<Message>,
     tools: &Option<Vec<Tool>>,
 ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
-    let client = build_client(config.proxy.as_ref(), 300, config.tls_backend)?;
+    let proxy = config.proxy.get();
+    let client = build_client(proxy.as_ref(), 300, config.tls_backend)?;
 
     // 构建请求体
     let request = CountTokensRequest {

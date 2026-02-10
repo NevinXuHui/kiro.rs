@@ -9,9 +9,10 @@ use super::{
     handlers::{
         add_credential, create_api_key, delete_api_key, delete_credential,
         get_all_credentials, get_api_key_by_id, get_credential_balance,
-        get_load_balancing_mode, get_token_usage, list_api_keys, reset_failure_count,
-        reset_token_usage, set_credential_disabled, set_credential_priority,
-        set_load_balancing_mode, update_api_key,
+        get_load_balancing_mode, get_proxy_config, get_token_usage, list_api_keys,
+        reset_failure_count, reset_token_usage, set_credential_disabled,
+        set_credential_priority, set_load_balancing_mode, set_proxy_config,
+        test_connectivity, update_api_key,
     },
     middleware::{AdminState, admin_auth_middleware},
 };
@@ -28,6 +29,8 @@ use super::{
 /// - `GET /credentials/:id/balance` - 获取凭据余额
 /// - `GET /config/load-balancing` - 获取负载均衡模式
 /// - `PUT /config/load-balancing` - 设置负载均衡模式
+/// - `GET /config/proxy` - 获取代理配置
+/// - `PUT /config/proxy` - 设置代理配置
 /// - `GET /api-keys` - 列出所有 API Key（脱敏）
 /// - `POST /api-keys` - 添加新 API Key
 /// - `GET /api-keys/:id` - 查询单个 API Key
@@ -55,6 +58,11 @@ pub fn create_admin_router(state: AdminState) -> Router {
             "/config/load-balancing",
             get(get_load_balancing_mode).put(set_load_balancing_mode),
         )
+        .route(
+            "/config/proxy",
+            get(get_proxy_config).put(set_proxy_config),
+        )
+        .route("/connectivity/test", post(test_connectivity))
         .route("/token-usage", get(get_token_usage))
         .route("/token-usage/reset", post(reset_token_usage))
         .route("/api-keys", get(list_api_keys).post(create_api_key))

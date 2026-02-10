@@ -180,6 +180,72 @@ impl SuccessResponse {
     }
 }
 
+// ============ 代理配置 ============
+
+/// 连通性测试请求
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectivityTestRequest {
+    /// 测试模式（"anthropic" 或 "openai"）
+    pub mode: String,
+}
+
+/// 连通性测试响应
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectivityTestResponse {
+    /// 是否成功
+    pub success: bool,
+    /// 测试模式
+    pub mode: String,
+    /// 延迟（毫秒）
+    pub latency_ms: u64,
+    /// 使用的凭据 ID
+    pub credential_id: Option<u64>,
+    /// 使用的模型
+    pub model: Option<String>,
+    /// 模型回复内容
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reply: Option<String>,
+    /// 输入 token 数
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_tokens: Option<i32>,
+    /// 输出 token 数
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_tokens: Option<i32>,
+    /// 错误信息
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+// ============ 代理配置 ============
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProxyConfigResponse {
+    /// 是否启用代理
+    pub enabled: bool,
+    /// 代理地址
+    pub url: Option<String>,
+    /// 代理认证用户名
+    pub username: Option<String>,
+    /// 是否设置了密码（不返回明文）
+    pub has_password: bool,
+}
+
+/// 更新代理配置请求
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateProxyConfigRequest {
+    /// 是否启用代理
+    pub enabled: bool,
+    /// 代理地址
+    pub url: Option<String>,
+    /// 代理认证用户名
+    pub username: Option<String>,
+    /// 代理认证密码
+    pub password: Option<String>,
+}
+
 // ============ API Key 管理 ============
 
 /// 创建 API Key 请求

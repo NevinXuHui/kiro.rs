@@ -78,7 +78,7 @@ async fn main() {
     }
     let api_key_store = Arc::new(parking_lot::RwLock::new(api_key_store));
 
-    // 构建代理配置
+    // 构建代理配置（共享，支持热更新）
     let proxy_config = config.proxy_url.as_ref().map(|url| {
         let mut proxy = http_client::ProxyConfig::new(url);
         if let (Some(username), Some(password)) = (&config.proxy_username, &config.proxy_password) {
@@ -91,11 +91,13 @@ async fn main() {
         tracing::info!("已配置 HTTP 代理: {}", config.proxy_url.as_ref().unwrap());
     }
 
+    let shared_proxy = http_client::SharedProxy::new(proxy_config);
+
     // 创建 MultiTokenManager 和 KiroProvider
     let token_manager = MultiTokenManager::new(
         config.clone(),
         credentials_list,
-        proxy_config.clone(),
+        shared_proxy.clone(),
         Some(credentials_path.into()),
         is_multiple_format,
     )
@@ -104,14 +106,18 @@ async fn main() {
         std::process::exit(1);
     });
     let token_manager = Arc::new(token_manager);
-    let kiro_provider = KiroProvider::with_proxy(token_manager.clone(), proxy_config.clone());
+    let kiro_provider = KiroProvider::with_proxy(token_manager.clone(), shared_proxy.clone());
+    // 为 Admin API 连通性测试创建独立的 KiroProvider（共享 token_manager 和 proxy）
+    let kiro_provider_admin = Arc::new(
+        KiroProvider::with_proxy(token_manager.clone(), shared_proxy.clone()),
+    );
 
     // 初始化 count_tokens 配置
     token::init_config(token::CountTokensConfig {
         api_url: config.count_tokens_api_url.clone(),
         api_key: config.count_tokens_api_key.clone(),
         auth_type: config.count_tokens_auth_type.clone(),
-        proxy: proxy_config,
+        proxy: shared_proxy.clone(),
         tls_backend: config.tls_backend,
     });
 
@@ -144,7 +150,10 @@ async fn main() {
             let admin_service = admin::AdminService::new(token_manager.clone());
             let admin_state = admin::AdminState::new(admin_key, admin_service)
                 .with_token_usage_tracker(token_usage_tracker.clone())
-                .with_api_key_store(api_key_store.clone());
+                .with_api_key_store(api_key_store.clone())
+                .with_shared_proxy(shared_proxy.clone())
+                .with_kiro_provider(kiro_provider_admin.clone())
+                .with_profile_arn(first_credentials.profile_arn.clone());
             let admin_app = admin::create_admin_router(admin_state);
 
             // 创建 Admin UI 路由

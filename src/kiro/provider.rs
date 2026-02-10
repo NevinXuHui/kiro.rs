@@ -4,14 +4,16 @@
 //! 支持流式和非流式请求
 //! 支持多凭据故障转移和重试
 
+use parking_lot::RwLock;
 use reqwest::Client;
 use reqwest::header::{AUTHORIZATION, CONNECTION, CONTENT_TYPE, HOST, HeaderMap, HeaderValue};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::time::sleep;
 use uuid::Uuid;
 
-use crate::http_client::{ProxyConfig, build_client};
+use crate::http_client::{SharedProxyConfig, build_client};
 use crate::kiro::machine_id;
 use crate::kiro::model::credentials::KiroCredentials;
 use crate::kiro::token_manager::{CallContext, MultiTokenManager};
@@ -28,25 +30,49 @@ const MAX_TOTAL_RETRIES: usize = 9;
 /// 支持多凭据故障转移和重试机制
 pub struct KiroProvider {
     token_manager: Arc<MultiTokenManager>,
-    client: Client,
+    proxy: SharedProxyConfig,
+    client: RwLock<Client>,
+    /// 缓存的代理版本号，用于检测代理配置变更
+    proxy_version: AtomicU64,
 }
 
 impl KiroProvider {
     /// 创建新的 KiroProvider 实例
     #[allow(dead_code)]
     pub fn new(token_manager: Arc<MultiTokenManager>) -> Self {
-        Self::with_proxy(token_manager, None)
+        use crate::http_client::SharedProxy;
+        Self::with_proxy(token_manager, SharedProxy::new(None))
     }
 
     /// 创建带代理配置的 KiroProvider 实例
-    pub fn with_proxy(token_manager: Arc<MultiTokenManager>, proxy: Option<ProxyConfig>) -> Self {
-        let client = build_client(proxy.as_ref(), 720, token_manager.config().tls_backend)
+    pub fn with_proxy(token_manager: Arc<MultiTokenManager>, proxy: SharedProxyConfig) -> Self {
+        let proxy_cfg = proxy.get();
+        let version = proxy.version();
+        let client = build_client(proxy_cfg.as_ref(), 720, token_manager.config().tls_backend)
             .expect("创建 HTTP 客户端失败");
 
         Self {
             token_manager,
-            client,
+            proxy,
+            client: RwLock::new(client),
+            proxy_version: AtomicU64::new(version),
         }
+    }
+
+    /// 获取 HTTP Client（代理变更时自动重建）
+    fn get_client(&self) -> Client {
+        let current_version = self.proxy.version();
+        let cached_version = self.proxy_version.load(Ordering::Relaxed);
+        if current_version != cached_version {
+            let proxy_cfg = self.proxy.get();
+            let tls_backend = self.token_manager.config().tls_backend;
+            if let Ok(new_client) = build_client(proxy_cfg.as_ref(), 720, tls_backend) {
+                *self.client.write() = new_client;
+                self.proxy_version.store(current_version, Ordering::Relaxed);
+                tracing::info!("代理配置已更新，HTTP Client 已重建");
+            }
+        }
+        self.client.read().clone()
     }
 
     /// 获取 token_manager 的引用
@@ -282,7 +308,7 @@ impl KiroProvider {
 
             // 发送请求
             let response = match self
-                .client
+                .get_client()
                 .post(&url)
                 .headers(headers)
                 .body(request_body.to_string())
@@ -411,7 +437,7 @@ impl KiroProvider {
 
             // 发送请求
             let response = match self
-                .client
+                .get_client()
                 .post(&url)
                 .headers(headers)
                 .body(request_body.to_string())
@@ -604,11 +630,12 @@ impl KiroProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::http_client::SharedProxy;
     use crate::kiro::token_manager::CallContext;
     use crate::model::config::Config;
 
     fn create_test_provider(config: Config, credentials: KiroCredentials) -> KiroProvider {
-        let tm = MultiTokenManager::new(config, vec![credentials], None, None, false).unwrap();
+        let tm = MultiTokenManager::new(config, vec![credentials], SharedProxy::new(None), None, false).unwrap();
         KiroProvider::new(Arc::new(tm))
     }
 
