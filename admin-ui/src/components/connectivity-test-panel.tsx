@@ -1,52 +1,87 @@
-import { useState } from 'react'
-import { Wifi, Loader2, CheckCircle2, XCircle, Clock, Hash, MessageSquare, ArrowDownToLine, ArrowUpFromLine } from 'lucide-react'
+import { useState, useRef, useCallback } from 'react'
+import { Wifi, Loader2, CheckCircle2, XCircle, Clock, Hash, MessageSquare, ArrowDownToLine, ArrowUpFromLine, Circle } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useTestConnectivity } from '@/hooks/use-credentials'
 import type { ConnectivityTestResponse } from '@/types/api'
 
+type StepStatus = 'pending' | 'running' | 'done' | 'error'
+interface ProgressStep { label: string; status: StepStatus }
+
 interface TestState {
   status: 'idle' | 'testing' | 'success' | 'error'
   result: ConnectivityTestResponse | null
+  steps: ProgressStep[]
 }
 
-const initialState: TestState = { status: 'idle', result: null }
+const STEP_LABELS = ['初始化测试参数', '连接上游服务', '等待模型响应', '解析返回结果']
+
+const initialState: TestState = { status: 'idle', result: null, steps: [] }
+
+function makeSteps(active: number): ProgressStep[] {
+  return STEP_LABELS.map((label, i) => ({
+    label,
+    status: (i < active ? 'done' : i === active ? 'running' : 'pending') as StepStatus,
+  }))
+}
+
+function finalizeSteps(errorAt?: number): ProgressStep[] {
+  return STEP_LABELS.map((label, i) => ({
+    label,
+    status: (errorAt != null ? (i < errorAt ? 'done' : i === errorAt ? 'error' : 'pending') : 'done') as StepStatus,
+  }))
+}
 
 export function ConnectivityTestPanel() {
   const [anthropicState, setAnthropicState] = useState<TestState>(initialState)
   const [openaiState, setOpenaiState] = useState<TestState>(initialState)
   const testMutation = useTestConnectivity()
+  const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>[]>>({ anthropic: [], openai: [] })
 
-  const runTest = (mode: 'anthropic' | 'openai') => {
+  const clearTimers = useCallback((mode: string) => {
+    timersRef.current[mode]?.forEach(clearTimeout)
+    timersRef.current[mode] = []
+  }, [])
+
+  const runTest = useCallback((mode: 'anthropic' | 'openai') => {
     const setState = mode === 'anthropic' ? setAnthropicState : setOpenaiState
-    setState({ status: 'testing', result: null })
+    clearTimers(mode)
 
-    testMutation.mutate(
-      { mode },
-      {
-        onSuccess: (data) => {
-          setState({ status: data.success ? 'success' : 'error', result: data })
-        },
-        onError: (err) => {
-          setState({
-            status: 'error',
-            result: {
-              success: false,
-              mode,
-              latencyMs: 0,
-              credentialId: null,
-              model: null,
-              reply: null,
-              inputTokens: null,
-              outputTokens: null,
-              error: (err as Error).message || '请求失败',
-            },
-          })
-        },
-      }
+    setState({ status: 'testing', result: null, steps: makeSteps(0) })
+
+    timersRef.current[mode].push(
+      setTimeout(() => setState(prev => ({ ...prev, steps: makeSteps(1) })), 400),
+      setTimeout(() => setState(prev => ({ ...prev, steps: makeSteps(2) })), 1000),
     )
-  }
+
+    testMutation.mutate({ mode }, {
+      onSuccess: (data) => {
+        clearTimers(mode)
+        setState(prev => ({ ...prev, steps: makeSteps(3) }))
+        setTimeout(() => {
+          setState({
+            status: data.success ? 'success' : 'error',
+            result: data,
+            steps: finalizeSteps(data.success ? undefined : 3),
+          })
+        }, 300)
+      },
+      onError: (err) => {
+        clearTimers(mode)
+        setState({
+          status: 'error',
+          steps: finalizeSteps(2),
+          result: {
+            success: false, mode, latencyMs: 0,
+            credentialId: null, model: null, reply: null,
+            inputTokens: null, outputTokens: null,
+            error: (err as Error).message || '请求失败',
+          },
+        })
+      },
+    })
+  }, [testMutation, clearTimers])
 
   return (
     <div className="space-y-3 sm:space-y-4">
@@ -58,24 +93,20 @@ export function ConnectivityTestPanel() {
 
       {/* 测试卡片 */}
       <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
-        {/* Anthropic 模式 */}
         <TestCard
           title="Anthropic 模式"
           endpoint="/v1/messages"
           description="测试 Anthropic 兼容接口的上游连通性"
           state={anthropicState}
           onTest={() => runTest('anthropic')}
-          isTesting={anthropicState.status === 'testing'}
         />
 
-        {/* OpenAI 模式 */}
         <TestCard
           title="OpenAI 模式"
           endpoint="/v1/chat/completions"
           description="测试 OpenAI 兼容接口的上游连通性"
           state={openaiState}
           onTest={() => runTest('openai')}
-          isTesting={openaiState.status === 'testing'}
         />
       </div>
     </div>
@@ -88,15 +119,14 @@ function TestCard({
   description,
   state,
   onTest,
-  isTesting,
 }: {
   title: string
   endpoint: string
   description: string
   state: TestState
   onTest: () => void
-  isTesting: boolean
 }) {
+  const isTesting = state.status === 'testing'
   return (
     <Card>
       <CardHeader className="pb-2 sm:pb-3 px-3 sm:px-6">
@@ -125,12 +155,36 @@ function TestCard({
           )}
         </Button>
 
+        {/* 步骤进度 */}
+        {state.steps.length > 0 && <StepProgress steps={state.steps} />}
+
         {/* 结果区域 */}
-        {state.status !== 'idle' && state.status !== 'testing' && state.result && (
-          <TestResult result={state.result} />
-        )}
+        {state.result && <TestResult result={state.result} />}
       </CardContent>
     </Card>
+  )
+}
+
+function StepProgress({ steps }: { steps: ProgressStep[] }) {
+  return (
+    <div className="space-y-1.5 text-xs">
+      {steps.map((step, i) => (
+        <div key={i} className="flex items-center gap-2">
+          {step.status === 'done' && <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />}
+          {step.status === 'running' && <Loader2 className="h-3.5 w-3.5 text-blue-500 animate-spin shrink-0" />}
+          {step.status === 'error' && <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />}
+          {step.status === 'pending' && <Circle className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />}
+          <span className={
+            step.status === 'done' ? 'text-green-600 dark:text-green-400'
+            : step.status === 'running' ? 'text-foreground font-medium'
+            : step.status === 'error' ? 'text-red-600 dark:text-red-400'
+            : 'text-muted-foreground/50'
+          }>
+            {step.label}
+          </span>
+        </div>
+      ))}
+    </div>
   )
 }
 
