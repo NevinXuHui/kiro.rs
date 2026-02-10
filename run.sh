@@ -126,10 +126,7 @@ fi
 if [ "$BUILD_FRONTEND" = true ]; then
     echo -e "${GREEN}==> 构建前端 Admin UI...${NC}"
     cd admin-ui
-    if [ ! -d "node_modules" ]; then
-        echo -e "${YELLOW}首次构建，安装依赖...${NC}"
-        pnpm install
-    fi
+    pnpm install
     pnpm build
     cd ..
     echo -e "${GREEN}✓ 前端构建完成${NC}"
@@ -140,9 +137,7 @@ if [ ! -d "admin-ui/dist" ] && [ "$SKIP_BUILD" = false ]; then
     echo -e "${YELLOW}警告: admin-ui/dist 不存在，需要先构建前端${NC}"
     echo -e "${YELLOW}正在构建前端...${NC}"
     cd admin-ui
-    if [ ! -d "node_modules" ]; then
-        pnpm install
-    fi
+    pnpm install
     pnpm build
     cd ..
     echo -e "${GREEN}✓ 前端构建完成${NC}"
