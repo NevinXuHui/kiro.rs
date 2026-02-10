@@ -39,11 +39,17 @@ interface VerificationResult {
   rollbackError?: string
 }
 
-async function sha256Hex(value: string): Promise<string> {
-  const encoded = new TextEncoder().encode(value)
-  const digest = await crypto.subtle.digest('SHA-256', encoded)
-  const bytes = new Uint8Array(digest)
-  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
+async function sha256Hex(value: string): Promise<string | null> {
+  // crypto.subtle 仅在安全上下文（HTTPS / localhost）中可用
+  if (!crypto?.subtle) return null
+  try {
+    const encoded = new TextEncoder().encode(value)
+    const digest = await crypto.subtle.digest('SHA-256', encoded)
+    const bytes = new Uint8Array(digest)
+    return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
+  } catch {
+    return null
+  }
 }
 
 export function BatchImportDialog({ open, onOpenChange }: BatchImportDialogProps) {
@@ -85,16 +91,51 @@ export function BatchImportDialog({ open, onOpenChange }: BatchImportDialogProps
     setResults([])
   }
 
-  const handleBatchImport = async () => {
-    try {
-      // 1. 解析 JSON
-      const parsed = JSON.parse(jsonInput)
-      let credentials: CredentialInput[] = Array.isArray(parsed) ? parsed : [parsed]
+  const parseCredentials = (input: string): CredentialInput[] => {
+    const trimmed = input.trim()
+    if (!trimmed) return []
 
-      if (credentials.length === 0) {
-        toast.error('没有可导入的凭据')
-        return
+    // 尝试标准 JSON 解析（数组或单对象）
+    try {
+      const parsed = JSON.parse(trimmed)
+      return Array.isArray(parsed) ? parsed : [parsed]
+    } catch {
+      // 标准 JSON 解析失败，尝试 NDJSON（每行一个 JSON 对象）
+    }
+
+    const lines = trimmed.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('//'))
+    const results: CredentialInput[] = []
+    for (let i = 0; i < lines.length; i++) {
+      // 移除行尾逗号（兼容从数组中复制的片段）
+      const line = lines[i].replace(/,\s*$/, '')
+      try {
+        const obj = JSON.parse(line)
+        if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+          results.push(obj)
+        }
+      } catch {
+        throw new Error(`第 ${i + 1} 行 JSON 解析失败: ${line.substring(0, 50)}...`)
       }
+    }
+    return results
+  }
+
+  const handleBatchImport = async () => {
+    // 先解析，解析错误单独提示
+    let credentials: CredentialInput[]
+    try {
+      credentials = parseCredentials(jsonInput)
+    } catch (error) {
+      toast.error('JSON 格式错误: ' + extractErrorMessage(error))
+      return
+    }
+
+    if (credentials.length === 0) {
+      toast.error('没有可导入的凭据')
+      return
+    }
+
+    try {
 
       setImporting(true)
       setProgress({ current: 0, total: credentials.length })
@@ -134,8 +175,8 @@ export function BatchImportDialog({ open, onOpenChange }: BatchImportDialogProps
           return newResults
         })
 
-        // 检查重复
-        if (existingTokenHashes.has(tokenHash)) {
+        // 检查重复（hash 不可用时跳过客户端去重，由后端处理）
+        if (tokenHash && existingTokenHashes.has(tokenHash)) {
           duplicateCount++
           const existingCred = existingCredentials?.credentials.find(c => c.refreshTokenHash === tokenHash)
           setResults(prev => {
@@ -193,7 +234,7 @@ export function BatchImportDialog({ open, onOpenChange }: BatchImportDialogProps
 
           // 验活成功
           successCount++
-          existingTokenHashes.add(tokenHash)
+          if (tokenHash) existingTokenHashes.add(tokenHash)
           setCurrentProcessing(addedCred.email ? `验活成功: ${addedCred.email}` : `验活成功: 凭据 ${i + 1}`)
           setResults(prev => {
             const newResults = [...prev]
@@ -257,7 +298,7 @@ export function BatchImportDialog({ open, onOpenChange }: BatchImportDialogProps
         }
       }
     } catch (error) {
-      toast.error('JSON 格式错误: ' + extractErrorMessage(error))
+      toast.error('导入失败: ' + extractErrorMessage(error))
     } finally {
       setImporting(false)
     }
@@ -320,7 +361,7 @@ export function BatchImportDialog({ open, onOpenChange }: BatchImportDialogProps
               JSON 格式凭据
             </label>
             <textarea
-              placeholder={'粘贴 JSON 格式的凭据（支持单个对象或数组）\n例如: [{"refreshToken":"...","clientId":"...","clientSecret":"...","authRegion":"us-east-1","apiRegion":"us-west-2"}]'}
+              placeholder={'粘贴 JSON 格式的凭据，支持以下格式：\n\n1. JSON 数组: [{"refreshToken":"...","clientId":"...","clientSecret":"..."}, ...]\n2. 单个对象: {"refreshToken":"...","clientId":"...","clientSecret":"..."}\n3. 每行一个 JSON 对象（NDJSON）:\n{"refreshToken":"...","clientId":"...","clientSecret":"..."}\n{"refreshToken":"...","clientId":"...","clientSecret":"..."}'}
               value={jsonInput}
               onChange={(e) => setJsonInput(e.target.value)}
               disabled={importing}
