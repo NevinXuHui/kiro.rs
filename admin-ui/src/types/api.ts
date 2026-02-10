@@ -90,6 +90,7 @@ export interface TokenUsageRecord {
   credentialId: number
   inputTokens: number
   outputTokens: number
+  apiKeyId?: number
 }
 
 // Token 使用统计响应
@@ -99,5 +100,42 @@ export interface TokenUsageResponse {
   totalRequests: number
   byCredential: Record<string, GroupTokenStats>
   byModel: Record<string, GroupTokenStats>
+  byApiKey: Record<string, GroupTokenStats>
   recentRequests: TokenUsageRecord[]
+}
+
+// API Key 条目视图（脱敏）
+export interface ApiKeyEntryView {
+  id: number
+  key: string
+  keyLength: number
+  label: string
+  readOnly: boolean
+  allowedModels: string[] | null
+  disabled: boolean
+  createdAt: string
+}
+
+// 创建 API Key 请求
+export interface CreateApiKeyRequest {
+  key?: string
+  label: string
+  readOnly?: boolean
+  allowedModels?: string[]
+}
+
+// 创建 API Key 响应
+export interface CreateApiKeyResponse {
+  success: boolean
+  message: string
+  id: number
+  key: string
+}
+
+// 更新 API Key 请求
+export interface UpdateApiKeyRequest {
+  label?: string
+  readOnly?: boolean
+  allowedModels?: string[] | null
+  disabled?: boolean
 }

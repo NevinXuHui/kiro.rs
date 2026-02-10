@@ -3,12 +3,14 @@
 use std::convert::Infallible;
 use std::sync::Arc;
 
+use crate::api_key_store::ApiKeyInfo;
 use crate::kiro::model::events::Event;
 use crate::kiro::model::requests::kiro::KiroRequest;
 use crate::kiro::parser::decoder::EventStreamDecoder;
 use crate::token;
 use crate::token_usage::TokenUsageTracker;
 use axum::{
+    Extension,
     Json as JsonExtractor,
     body::Body,
     extract::State,
@@ -120,8 +122,37 @@ pub async fn get_models() -> impl IntoResponse {
 /// 创建消息（对话）
 pub async fn post_messages(
     State(state): State<AppState>,
+    Extension(key_info): Extension<ApiKeyInfo>,
     JsonExtractor(mut payload): JsonExtractor<MessagesRequest>,
 ) -> Response {
+    // 权限检查：只读 Key 不允许创建消息
+    if key_info.read_only {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ErrorResponse::new(
+                "permission_error",
+                "此 API Key 为只读模式，不允许创建消息",
+            )),
+        )
+            .into_response();
+    }
+
+    // 权限检查：模型白名单
+    if let Some(ref allowed) = key_info.allowed_models {
+        if !allowed.iter().any(|m| m == &payload.model) {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(ErrorResponse::new(
+                    "permission_error",
+                    format!("此 API Key 不允许使用模型 {}", payload.model),
+                )),
+            )
+                .into_response();
+        }
+    }
+
+    let api_key_id = Some(key_info.id);
+
     tracing::info!(
         model = %payload.model,
         max_tokens = %payload.max_tokens,
@@ -231,6 +262,7 @@ pub async fn post_messages(
             input_tokens,
             thinking_enabled,
             state.token_usage_tracker.clone(),
+            api_key_id,
         )
         .await
     } else {
@@ -241,6 +273,7 @@ pub async fn post_messages(
             &payload.model,
             input_tokens,
             state.token_usage_tracker.clone(),
+            api_key_id,
         )
         .await
     }
@@ -254,6 +287,7 @@ async fn handle_stream_request(
     input_tokens: i32,
     thinking_enabled: bool,
     token_usage_tracker: Option<Arc<TokenUsageTracker>>,
+    api_key_id: Option<u64>,
 ) -> Response {
     // 调用 Kiro API（支持多凭据故障转移）
     let response = match provider.call_api_stream(request_body).await {
@@ -281,7 +315,7 @@ async fn handle_stream_request(
     let initial_events = ctx.generate_initial_events();
 
     // 创建 SSE 流
-    let stream = create_sse_stream(response, ctx, initial_events, token_usage_tracker, model.to_string(), credential_id);
+    let stream = create_sse_stream(response, ctx, initial_events, token_usage_tracker, model.to_string(), credential_id, api_key_id);
 
     // 返回 SSE 响应
     Response::builder()
@@ -309,6 +343,7 @@ fn create_sse_stream(
     token_usage_tracker: Option<Arc<TokenUsageTracker>>,
     model: String,
     credential_id: u64,
+    api_key_id: Option<u64>,
 ) -> impl Stream<Item = Result<Bytes, Infallible>> {
     // 先发送初始事件
     let initial_stream = stream::iter(
@@ -369,7 +404,7 @@ fn create_sse_stream(
                                 // 记录 token 使用量
                                 if let Some(ref tracker) = tracker {
                                     let final_input = ctx.context_input_tokens.unwrap_or(ctx.input_tokens);
-                                    tracker.record(model.clone(), credential_id, final_input, ctx.output_tokens);
+                                    tracker.record(model.clone(), credential_id, final_input, ctx.output_tokens, api_key_id);
                                 }
                                 // 发送最终事件并结束
                                 let final_events = ctx.generate_final_events();
@@ -383,7 +418,7 @@ fn create_sse_stream(
                                 // 记录 token 使用量
                                 if let Some(ref tracker) = tracker {
                                     let final_input = ctx.context_input_tokens.unwrap_or(ctx.input_tokens);
-                                    tracker.record(model.clone(), credential_id, final_input, ctx.output_tokens);
+                                    tracker.record(model.clone(), credential_id, final_input, ctx.output_tokens, api_key_id);
                                 }
                                 // 流结束，发送最终事件
                                 let final_events = ctx.generate_final_events();
@@ -420,6 +455,7 @@ async fn handle_non_stream_request(
     model: &str,
     input_tokens: i32,
     token_usage_tracker: Option<Arc<TokenUsageTracker>>,
+    api_key_id: Option<u64>,
 ) -> Response {
     // 调用 Kiro API（支持多凭据故障转移）
     let response = match provider.call_api(request_body).await {
@@ -569,6 +605,7 @@ async fn handle_non_stream_request(
             provider.current_credential_id(),
             final_input_tokens,
             output_tokens,
+            api_key_id,
         );
     }
 
@@ -659,8 +696,37 @@ pub async fn count_tokens(
 /// - message_start 中的 input_tokens 是从 contextUsageEvent 计算的准确值
 pub async fn post_messages_cc(
     State(state): State<AppState>,
+    Extension(key_info): Extension<ApiKeyInfo>,
     JsonExtractor(mut payload): JsonExtractor<MessagesRequest>,
 ) -> Response {
+    // 权限检查：只读 Key 不允许创建消息
+    if key_info.read_only {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ErrorResponse::new(
+                "permission_error",
+                "此 API Key 为只读模式，不允许创建消息",
+            )),
+        )
+            .into_response();
+    }
+
+    // 权限检查：模型白名单
+    if let Some(ref allowed) = key_info.allowed_models {
+        if !allowed.iter().any(|m| m == &payload.model) {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(ErrorResponse::new(
+                    "permission_error",
+                    format!("此 API Key 不允许使用模型 {}", payload.model),
+                )),
+            )
+                .into_response();
+        }
+    }
+
+    let api_key_id = Some(key_info.id);
+
     tracing::info!(
         model = %payload.model,
         max_tokens = %payload.max_tokens,
@@ -771,6 +837,7 @@ pub async fn post_messages_cc(
             input_tokens,
             thinking_enabled,
             state.token_usage_tracker.clone(),
+            api_key_id,
         )
         .await
     } else {
@@ -781,6 +848,7 @@ pub async fn post_messages_cc(
             &payload.model,
             input_tokens,
             state.token_usage_tracker.clone(),
+            api_key_id,
         )
         .await
     }
@@ -797,6 +865,7 @@ async fn handle_stream_request_buffered(
     estimated_input_tokens: i32,
     thinking_enabled: bool,
     token_usage_tracker: Option<Arc<TokenUsageTracker>>,
+    api_key_id: Option<u64>,
 ) -> Response {
     // 调用 Kiro API（支持多凭据故障转移）
     let response = match provider.call_api_stream(request_body).await {
@@ -821,7 +890,7 @@ async fn handle_stream_request_buffered(
     let ctx = BufferedStreamContext::new(model, estimated_input_tokens, thinking_enabled);
 
     // 创建缓冲 SSE 流
-    let stream = create_buffered_sse_stream(response, ctx, token_usage_tracker, model.to_string(), credential_id);
+    let stream = create_buffered_sse_stream(response, ctx, token_usage_tracker, model.to_string(), credential_id, api_key_id);
 
     // 返回 SSE 响应
     Response::builder()
@@ -846,6 +915,7 @@ fn create_buffered_sse_stream(
     token_usage_tracker: Option<Arc<TokenUsageTracker>>,
     model: String,
     credential_id: u64,
+    api_key_id: Option<u64>,
 ) -> impl Stream<Item = Result<Bytes, Infallible>> {
     let body_stream = response.bytes_stream();
 
@@ -907,7 +977,7 @@ fn create_buffered_sse_stream(
                                     // 记录 token 使用量
                                     if let Some(ref tracker) = tracker {
                                         let (final_input, output) = ctx.token_stats();
-                                        tracker.record(model.clone(), credential_id, final_input, output);
+                                        tracker.record(model.clone(), credential_id, final_input, output, api_key_id);
                                     }
                                     // 发生错误，完成处理并返回所有事件
                                     let all_events = ctx.finish_and_get_all_events();
@@ -921,7 +991,7 @@ fn create_buffered_sse_stream(
                                     // 记录 token 使用量
                                     if let Some(ref tracker) = tracker {
                                         let (final_input, output) = ctx.token_stats();
-                                        tracker.record(model.clone(), credential_id, final_input, output);
+                                        tracker.record(model.clone(), credential_id, final_input, output, api_key_id);
                                     }
                                     // 流结束，完成处理并返回所有事件（已更正 input_tokens）
                                     let all_events = ctx.finish_and_get_all_events();

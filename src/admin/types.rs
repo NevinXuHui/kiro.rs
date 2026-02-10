@@ -180,6 +180,44 @@ impl SuccessResponse {
     }
 }
 
+// ============ API Key 管理 ============
+
+/// 创建 API Key 请求
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateApiKeyRequest {
+    /// Key 值（可选，不提供则自动生成）
+    pub key: Option<String>,
+    /// 用途标签
+    pub label: String,
+    /// 只读模式
+    #[serde(default)]
+    pub read_only: bool,
+    /// 模型白名单（None = 允许全部）
+    pub allowed_models: Option<Vec<String>>,
+}
+
+/// 创建 API Key 响应（包含完整 Key，仅创建时返回）
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateApiKeyResponse {
+    pub success: bool,
+    pub message: String,
+    pub id: u64,
+    /// 完整 Key 值（仅创建时返回，之后只能看到脱敏版本）
+    pub key: String,
+}
+
+/// 更新 API Key 请求（所有字段可选）
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateApiKeyRequest {
+    pub label: Option<String>,
+    pub read_only: Option<bool>,
+    pub allowed_models: Option<Option<Vec<String>>>,
+    pub disabled: Option<bool>,
+}
+
 /// 错误响应
 #[derive(Debug, Serialize)]
 pub struct AdminErrorResponse {

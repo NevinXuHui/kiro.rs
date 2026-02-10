@@ -36,6 +36,9 @@ pub struct TokenUsageRecord {
     pub model: String,
     /// 使用的凭据 ID
     pub credential_id: u64,
+    /// 使用的 API Key ID（可选）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key_id: Option<u64>,
     /// 输入 tokens
     pub input_tokens: i32,
     /// 输出 tokens
@@ -63,6 +66,7 @@ struct PersistedStats {
     total_requests: u64,
     by_credential: HashMap<String, GroupTokenStats>,
     by_model: HashMap<String, GroupTokenStats>,
+    by_api_key: HashMap<String, GroupTokenStats>,
     recent_requests: VecDeque<TokenUsageRecord>,
 }
 
@@ -77,6 +81,7 @@ pub struct TokenUsageResponse {
     pub total_requests: u64,
     pub by_credential: HashMap<String, GroupTokenStats>,
     pub by_model: HashMap<String, GroupTokenStats>,
+    pub by_api_key: HashMap<String, GroupTokenStats>,
     pub recent_requests: Vec<TokenUsageRecord>,
 }
 
@@ -119,11 +124,13 @@ impl TokenUsageTracker {
         credential_id: u64,
         input_tokens: i32,
         output_tokens: i32,
+        api_key_id: Option<u64>,
     ) {
         let record = TokenUsageRecord {
             timestamp: Utc::now().to_rfc3339(),
             model: model.clone(),
             credential_id,
+            api_key_id,
             input_tokens,
             output_tokens,
         };
@@ -151,6 +158,17 @@ impl TokenUsageTracker {
             model_stats.output_tokens += output_tokens as i64;
             model_stats.requests += 1;
 
+            // 按 API Key 分组
+            if let Some(key_id) = api_key_id {
+                let key_stats = stats
+                    .by_api_key
+                    .entry(key_id.to_string())
+                    .or_default();
+                key_stats.input_tokens += input_tokens as i64;
+                key_stats.output_tokens += output_tokens as i64;
+                key_stats.requests += 1;
+            }
+
             // 最近请求（环形缓冲）
             if stats.recent_requests.len() >= MAX_RECENT_REQUESTS {
                 stats.recent_requests.pop_front();
@@ -170,6 +188,7 @@ impl TokenUsageTracker {
             total_requests: stats.total_requests,
             by_credential: stats.by_credential.clone(),
             by_model: stats.by_model.clone(),
+            by_api_key: stats.by_api_key.clone(),
             recent_requests: stats.recent_requests.iter().cloned().collect(),
         }
     }

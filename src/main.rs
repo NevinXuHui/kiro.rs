@@ -1,6 +1,7 @@
 mod admin;
 mod admin_ui;
 mod anthropic;
+pub mod api_key_store;
 mod common;
 mod http_client;
 mod kiro;
@@ -66,11 +67,16 @@ async fn main() {
     let first_credentials = credentials_list.first().cloned().unwrap_or_default();
     tracing::debug!("主凭证: {:?}", first_credentials);
 
-    // 获取 API Key
-    let api_key = config.api_key.clone().unwrap_or_else(|| {
-        tracing::error!("配置文件中未设置 apiKey");
-        std::process::exit(1);
-    });
+    // 创建 API Key 存储（支持从旧 config.json apiKey 自动迁移）
+    let config_dir = std::path::Path::new(&config_path).parent();
+    let api_key_store = api_key_store::ApiKeyStore::load_or_migrate(
+        config_dir,
+        config.api_key.as_deref(),
+    );
+    if api_key_store.is_empty() {
+        tracing::warn!("未配置任何 API Key，客户端请求将被拒绝");
+    }
+    let api_key_store = Arc::new(parking_lot::RwLock::new(api_key_store));
 
     // 构建代理配置
     let proxy_config = config.proxy_url.as_ref().map(|url| {
@@ -116,7 +122,7 @@ async fn main() {
 
     // 构建 Anthropic API 路由（从第一个凭据获取 profile_arn）
     let anthropic_app = anthropic::create_router_with_provider(
-        &api_key,
+        api_key_store.clone(),
         Some(kiro_provider),
         first_credentials.profile_arn.clone(),
         Some(token_usage_tracker.clone()),
@@ -137,7 +143,8 @@ async fn main() {
         } else {
             let admin_service = admin::AdminService::new(token_manager.clone());
             let admin_state = admin::AdminState::new(admin_key, admin_service)
-                .with_token_usage_tracker(token_usage_tracker.clone());
+                .with_token_usage_tracker(token_usage_tracker.clone())
+                .with_api_key_store(api_key_store.clone());
             let admin_app = admin::create_admin_router(admin_state);
 
             // 创建 Admin UI 路由
@@ -155,8 +162,9 @@ async fn main() {
 
     // 启动服务器
     let addr = format!("{}:{}", config.host, config.port);
+    let api_key_count = api_key_store.read().list().len();
     tracing::info!("启动 Anthropic API 端点: {}", addr);
-    tracing::info!("API Key: {}***", &api_key[..(api_key.len() / 2)]);
+    tracing::info!("已加载 {} 个 API Key", api_key_count);
     tracing::info!("可用 API:");
     tracing::info!("  GET  /v1/models");
     tracing::info!("  POST /v1/messages");
@@ -170,6 +178,11 @@ async fn main() {
         tracing::info!("  GET  /api/admin/credentials/:index/balance");
         tracing::info!("  GET  /api/admin/token-usage");
         tracing::info!("  POST /api/admin/token-usage/reset");
+        tracing::info!("  GET  /api/admin/api-keys");
+        tracing::info!("  POST /api/admin/api-keys");
+        tracing::info!("  GET  /api/admin/api-keys/:id");
+        tracing::info!("  PUT  /api/admin/api-keys/:id");
+        tracing::info!("  DELETE /api/admin/api-keys/:id");
         tracing::info!("Admin UI:");
         tracing::info!("  GET  /admin");
     }

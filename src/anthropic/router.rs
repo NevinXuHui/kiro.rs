@@ -8,7 +8,9 @@ use axum::{
     middleware,
     routing::{get, post},
 };
+use parking_lot::RwLock;
 
+use crate::api_key_store::ApiKeyStore;
 use crate::kiro::provider::KiroProvider;
 use crate::token_usage::TokenUsageTracker;
 
@@ -38,12 +40,12 @@ const MAX_BODY_SIZE: usize = 50 * 1024 * 1024;
 
 /// 创建带有 KiroProvider 的 Anthropic API 路由
 pub fn create_router_with_provider(
-    api_key: impl Into<String>,
+    api_key_store: Arc<RwLock<ApiKeyStore>>,
     kiro_provider: Option<KiroProvider>,
     profile_arn: Option<String>,
     token_usage_tracker: Option<Arc<TokenUsageTracker>>,
 ) -> Router {
-    let mut state = AppState::new(api_key);
+    let mut state = AppState::new(api_key_store);
     if let Some(provider) = kiro_provider {
         state = state.with_kiro_provider(provider);
     }

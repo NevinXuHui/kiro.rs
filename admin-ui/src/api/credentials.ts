@@ -9,6 +9,10 @@ import type {
   AddCredentialRequest,
   AddCredentialResponse,
   TokenUsageResponse,
+  ApiKeyEntryView,
+  CreateApiKeyRequest,
+  CreateApiKeyResponse,
+  UpdateApiKeyRequest,
 } from '@/types/api'
 
 // 创建 axios 实例
@@ -107,5 +111,37 @@ export async function getTokenUsage(): Promise<TokenUsageResponse> {
 // 重置 token 使用统计
 export async function resetTokenUsage(): Promise<SuccessResponse> {
   const { data } = await api.post<SuccessResponse>('/token-usage/reset')
+  return data
+}
+
+// ============ API Key 管理 ============
+
+// 获取所有 API Key
+export async function getApiKeys(): Promise<ApiKeyEntryView[]> {
+  const { data } = await api.get<ApiKeyEntryView[]>('/api-keys')
+  return data
+}
+
+// 获取单个 API Key
+export async function getApiKey(id: number): Promise<ApiKeyEntryView> {
+  const { data } = await api.get<ApiKeyEntryView>(`/api-keys/${id}`)
+  return data
+}
+
+// 创建 API Key
+export async function createApiKey(req: CreateApiKeyRequest): Promise<CreateApiKeyResponse> {
+  const { data } = await api.post<CreateApiKeyResponse>('/api-keys', req)
+  return data
+}
+
+// 更新 API Key
+export async function updateApiKey(id: number, req: UpdateApiKeyRequest): Promise<SuccessResponse> {
+  const { data } = await api.put<SuccessResponse>(`/api-keys/${id}`, req)
+  return data
+}
+
+// 删除 API Key
+export async function deleteApiKey(id: number): Promise<SuccessResponse> {
+  const { data } = await api.delete<SuccessResponse>(`/api-keys/${id}`)
   return data
 }

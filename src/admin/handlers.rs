@@ -9,8 +9,8 @@ use axum::{
 use super::{
     middleware::AdminState,
     types::{
-        AddCredentialRequest, SetDisabledRequest, SetLoadBalancingModeRequest, SetPriorityRequest,
-        SuccessResponse,
+        AddCredentialRequest, CreateApiKeyRequest, CreateApiKeyResponse, SetDisabledRequest,
+        SetLoadBalancingModeRequest, SetPriorityRequest, SuccessResponse, UpdateApiKeyRequest,
     },
 };
 
@@ -158,4 +158,162 @@ pub async fn reset_token_usage(State(state): State<AdminState>) -> impl IntoResp
         )
             .into_response(),
     }
+}
+
+/// GET /api/admin/api-keys
+/// 列出所有 API Key（脱敏）
+pub async fn list_api_keys(State(state): State<AdminState>) -> impl IntoResponse {
+    match &state.api_key_store {
+        Some(store) => {
+            let store = store.read();
+            Json(store.list()).into_response()
+        }
+        None => (
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            Json(super::types::AdminErrorResponse::new(
+                "service_unavailable",
+                "API Key 管理未启用",
+            )),
+        )
+            .into_response(),
+    }
+}
+
+/// GET /api/admin/api-keys/:id
+/// 查询单个 API Key（脱敏）
+pub async fn get_api_key_by_id(
+    State(state): State<AdminState>,
+    Path(id): Path<u64>,
+) -> impl IntoResponse {
+    match &state.api_key_store {
+        Some(store) => {
+            let store = store.read();
+            match store.get(id) {
+                Some(view) => Json(view).into_response(),
+                None => (
+                    axum::http::StatusCode::NOT_FOUND,
+                    Json(super::types::AdminErrorResponse::not_found(format!(
+                        "API Key #{} 不存在",
+                        id
+                    ))),
+                )
+                    .into_response(),
+            }
+        }
+        None => (
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            Json(super::types::AdminErrorResponse::new(
+                "service_unavailable",
+                "API Key 管理未启用",
+            )),
+        )
+            .into_response(),
+    }
+}
+
+/// POST /api/admin/api-keys
+/// 添加新 API Key
+pub async fn create_api_key(
+    State(state): State<AdminState>,
+    Json(payload): Json<CreateApiKeyRequest>,
+) -> impl IntoResponse {
+    match &state.api_key_store {
+        Some(store) => {
+            let key = payload
+                .key
+                .filter(|k| !k.trim().is_empty())
+                .unwrap_or_else(generate_api_key);
+            let mut store = store.write();
+            let id = store.add(key.clone(), payload.label, payload.read_only, payload.allowed_models);
+            Json(CreateApiKeyResponse {
+                success: true,
+                message: format!("API Key #{} 已创建", id),
+                id,
+                key,
+            })
+            .into_response()
+        }
+        None => (
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            Json(super::types::AdminErrorResponse::new(
+                "service_unavailable",
+                "API Key 管理未启用",
+            )),
+        )
+            .into_response(),
+    }
+}
+
+/// PUT /api/admin/api-keys/:id
+/// 更新 API Key 属性
+pub async fn update_api_key(
+    State(state): State<AdminState>,
+    Path(id): Path<u64>,
+    Json(payload): Json<UpdateApiKeyRequest>,
+) -> impl IntoResponse {
+    match &state.api_key_store {
+        Some(store) => {
+            let mut store = store.write();
+            match store.update(
+                id,
+                payload.label,
+                payload.read_only,
+                payload.allowed_models,
+                payload.disabled,
+            ) {
+                Ok(_) => {
+                    Json(SuccessResponse::new(format!("API Key #{} 已更新", id))).into_response()
+                }
+                Err(e) => (
+                    axum::http::StatusCode::NOT_FOUND,
+                    Json(super::types::AdminErrorResponse::not_found(e)),
+                )
+                    .into_response(),
+            }
+        }
+        None => (
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            Json(super::types::AdminErrorResponse::new(
+                "service_unavailable",
+                "API Key 管理未启用",
+            )),
+        )
+            .into_response(),
+    }
+}
+
+/// DELETE /api/admin/api-keys/:id
+/// 删除 API Key
+pub async fn delete_api_key(
+    State(state): State<AdminState>,
+    Path(id): Path<u64>,
+) -> impl IntoResponse {
+    match &state.api_key_store {
+        Some(store) => {
+            let mut store = store.write();
+            match store.delete(id) {
+                Ok(_) => {
+                    Json(SuccessResponse::new(format!("API Key #{} 已删除", id))).into_response()
+                }
+                Err(e) => (
+                    axum::http::StatusCode::NOT_FOUND,
+                    Json(super::types::AdminErrorResponse::not_found(e)),
+                )
+                    .into_response(),
+            }
+        }
+        None => (
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            Json(super::types::AdminErrorResponse::new(
+                "service_unavailable",
+                "API Key 管理未启用",
+            )),
+        )
+            .into_response(),
+    }
+}
+
+/// 自动生成 API Key
+fn generate_api_key() -> String {
+    format!("sk-{}", uuid::Uuid::new_v4().to_string().replace('-', ""))
 }

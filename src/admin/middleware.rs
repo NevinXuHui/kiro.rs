@@ -9,9 +9,11 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Json, Response},
 };
+use parking_lot::RwLock;
 
 use super::service::AdminService;
 use super::types::AdminErrorResponse;
+use crate::api_key_store::ApiKeyStore;
 use crate::common::auth;
 use crate::token_usage::TokenUsageTracker;
 
@@ -24,6 +26,8 @@ pub struct AdminState {
     pub service: Arc<AdminService>,
     /// Token 使用量追踪器
     pub token_usage_tracker: Option<Arc<TokenUsageTracker>>,
+    /// API Key 存储（共享引用，支持热更新 CRUD）
+    pub api_key_store: Option<Arc<RwLock<ApiKeyStore>>>,
 }
 
 impl AdminState {
@@ -32,11 +36,17 @@ impl AdminState {
             admin_api_key: admin_api_key.into(),
             service: Arc::new(service),
             token_usage_tracker: None,
+            api_key_store: None,
         }
     }
 
     pub fn with_token_usage_tracker(mut self, tracker: Arc<TokenUsageTracker>) -> Self {
         self.token_usage_tracker = Some(tracker);
+        self
+    }
+
+    pub fn with_api_key_store(mut self, store: Arc<RwLock<ApiKeyStore>>) -> Self {
+        self.api_key_store = Some(store);
         self
     }
 }

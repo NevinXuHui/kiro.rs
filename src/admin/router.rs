@@ -7,9 +7,11 @@ use axum::{
 
 use super::{
     handlers::{
-        add_credential, delete_credential, get_all_credentials, get_credential_balance,
-        get_load_balancing_mode, get_token_usage, reset_failure_count, reset_token_usage,
-        set_credential_disabled, set_credential_priority, set_load_balancing_mode,
+        add_credential, create_api_key, delete_api_key, delete_credential,
+        get_all_credentials, get_api_key_by_id, get_credential_balance,
+        get_load_balancing_mode, get_token_usage, list_api_keys, reset_failure_count,
+        reset_token_usage, set_credential_disabled, set_credential_priority,
+        set_load_balancing_mode, update_api_key,
     },
     middleware::{AdminState, admin_auth_middleware},
 };
@@ -26,6 +28,11 @@ use super::{
 /// - `GET /credentials/:id/balance` - 获取凭据余额
 /// - `GET /config/load-balancing` - 获取负载均衡模式
 /// - `PUT /config/load-balancing` - 设置负载均衡模式
+/// - `GET /api-keys` - 列出所有 API Key（脱敏）
+/// - `POST /api-keys` - 添加新 API Key
+/// - `GET /api-keys/:id` - 查询单个 API Key
+/// - `PUT /api-keys/:id` - 更新 API Key
+/// - `DELETE /api-keys/:id` - 删除 API Key
 /// - `GET /token-usage` - 获取 token 使用统计
 /// - `POST /token-usage/reset` - 重置 token 使用统计
 ///
@@ -50,6 +57,13 @@ pub fn create_admin_router(state: AdminState) -> Router {
         )
         .route("/token-usage", get(get_token_usage))
         .route("/token-usage/reset", post(reset_token_usage))
+        .route("/api-keys", get(list_api_keys).post(create_api_key))
+        .route(
+            "/api-keys/{id}",
+            get(get_api_key_by_id)
+                .put(update_api_key)
+                .delete(delete_api_key),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             admin_auth_middleware,

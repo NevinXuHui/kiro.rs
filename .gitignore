@@ -28,6 +28,7 @@
 # 敏感信息
 /kiro-credentials.json
 /tokens_export.json
+/api_keys.json
 
 # 日志文件
 /logs/
