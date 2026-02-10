@@ -8,13 +8,19 @@ import { useTokenUsage, useResetTokenUsage, useApiKeys } from '@/hooks/use-crede
 import { formatNumber } from '@/lib/utils'
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const
+const PAGE_SIZE_KEY = 'kiro-admin-page-size'
+
+function getStoredPageSize(): number {
+  const v = Number(localStorage.getItem(PAGE_SIZE_KEY))
+  return PAGE_SIZE_OPTIONS.includes(v as typeof PAGE_SIZE_OPTIONS[number]) ? v : 20
+}
 
 export function TokenUsagePanel() {
   const { data, isLoading, error, refetch, isFetching } = useTokenUsage()
   const { data: apiKeys } = useApiKeys()
   const resetMutation = useResetTokenUsage()
   const [currentPage, setCurrentPage] = useState(1)
-  const [pageSize, setPageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(getStoredPageSize)
 
   // 创建 API Key ID 到标签的映射
   const apiKeyMap = new Map(apiKeys?.map(key => [key.id, key.label]) || [])
@@ -270,7 +276,7 @@ export function TokenUsagePanel() {
                   <select
                     className="h-7 text-xs border rounded px-1 bg-background"
                     value={pageSize}
-                    onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1) }}
+                    onChange={(e) => { const v = Number(e.target.value); setPageSize(v); setCurrentPage(1); localStorage.setItem(PAGE_SIZE_KEY, String(v)) }}
                   >
                     {PAGE_SIZE_OPTIONS.map(n => (
                       <option key={n} value={n}>{n} 条/页</option>

@@ -1,11 +1,33 @@
 import { useState, useEffect } from 'react'
-import { Globe, Loader2, Save } from 'lucide-react'
+import { Globe, Loader2, Save, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useProxyConfig, useUpdateProxyConfig } from '@/hooks/use-credentials'
 import { extractErrorMessage } from '@/lib/utils'
+
+const PROXY_HISTORY_KEY = 'kiro-admin-proxy-history'
+const MAX_HISTORY = 10
+
+function getProxyHistory(): string[] {
+  try {
+    const raw = localStorage.getItem(PROXY_HISTORY_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch { return [] }
+}
+
+function addProxyHistory(url: string) {
+  if (!url.trim()) return
+  const history = getProxyHistory().filter(h => h !== url)
+  history.unshift(url)
+  localStorage.setItem(PROXY_HISTORY_KEY, JSON.stringify(history.slice(0, MAX_HISTORY)))
+}
+
+function removeProxyHistory(url: string) {
+  const history = getProxyHistory().filter(h => h !== url)
+  localStorage.setItem(PROXY_HISTORY_KEY, JSON.stringify(history))
+}
 
 export function ProxySettingsPanel() {
   const { data, isLoading, error } = useProxyConfig()
@@ -16,6 +38,7 @@ export function ProxySettingsPanel() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [dirty, setDirty] = useState(false)
+  const [proxyHistory, setProxyHistory] = useState<string[]>(getProxyHistory)
 
   // 从服务端数据初始化表单
   useEffect(() => {
@@ -44,6 +67,10 @@ export function ProxySettingsPanel() {
       {
         onSuccess: () => {
           toast.success(enabled ? '代理配置已更新并生效' : '代理已禁用')
+          if (enabled && url.trim()) {
+            addProxyHistory(url.trim())
+            setProxyHistory(getProxyHistory())
+          }
           setPassword('')
           setDirty(false)
         },
@@ -113,15 +140,43 @@ export function ProxySettingsPanel() {
           {/* 代理地址 */}
           <div className="space-y-1.5">
             <label className="text-sm font-medium">代理地址</label>
-            <input
-              type="text"
-              value={url}
-              onChange={(e) => handleFieldChange(setUrl)(e.target.value)}
-              disabled={!enabled}
-              placeholder="http://127.0.0.1:7890"
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-            />
-            <p className="text-xs text-muted-foreground">支持 http、https、socks5 协议</p>
+            <div className="relative">
+              <input
+                type="text"
+                list="proxy-history-list"
+                value={url}
+                onChange={(e) => handleFieldChange(setUrl)(e.target.value)}
+                disabled={!enabled}
+                placeholder="http://127.0.0.1:7890"
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              />
+              <datalist id="proxy-history-list">
+                {proxyHistory.map(h => <option key={h} value={h} />)}
+              </datalist>
+            </div>
+            <div className="flex items-center gap-1 flex-wrap">
+              <p className="text-xs text-muted-foreground">支持 http、https、socks5 协议</p>
+              {proxyHistory.length > 0 && (
+                <div className="flex items-center gap-1 flex-wrap">
+                  <span className="text-xs text-muted-foreground">· 历史:</span>
+                  {proxyHistory.map(h => (
+                    <span key={h} className="inline-flex items-center gap-0.5 text-xs bg-muted px-1.5 py-0.5 rounded">
+                      <button
+                        type="button"
+                        className="hover:underline text-foreground disabled:opacity-50"
+                        disabled={!enabled}
+                        onClick={() => { handleFieldChange(setUrl)(h) }}
+                      >{h}</button>
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:text-red-500"
+                        onClick={() => { removeProxyHistory(h); setProxyHistory(getProxyHistory()) }}
+                      ><X className="h-3 w-3" /></button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* 认证信息 */}
