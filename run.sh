@@ -17,6 +17,31 @@ CREDENTIALS_FILE="credentials.json"
 BUILD_FRONTEND=false
 BUILD_RELEASE=false
 SKIP_BUILD=false
+AUTO_DETECT_FRONTEND=true
+
+# 检测前端是否需要更新
+check_frontend_updates() {
+    # 如果 dist 目录不存在，需要构建
+    if [ ! -d "admin-ui/dist" ]; then
+        return 0  # 需要构建
+    fi
+
+    # 如果 src 目录不存在，跳过检测
+    if [ ! -d "admin-ui/src" ]; then
+        return 1  # 不需要构建
+    fi
+
+    # 查找 src 目录下最新修改的文件
+    local newest_src=$(find admin-ui/src -type f -newer admin-ui/dist 2>/dev/null | head -n 1)
+
+    # 如果找到比 dist 更新的源文件，需要重新构建
+    if [ -n "$newest_src" ]; then
+        echo -e "${YELLOW}检测到前端源码更新: $newest_src${NC}"
+        return 0  # 需要构建
+    fi
+
+    return 1  # 不需要构建
+}
 
 # 打印帮助信息
 print_help() {
@@ -25,14 +50,16 @@ print_help() {
     echo "选项:"
     echo "  -c, --config FILE          指定配置文件 (默认: config.json)"
     echo "  -r, --credentials FILE     指定凭据文件 (默认: credentials.json)"
-    echo "  -f, --frontend             重新构建前端"
+    echo "  -f, --frontend             强制重新构建前端"
     echo "  -b, --release              使用 release 模式构建"
     echo "  -s, --skip-build           跳过构建，直接运行"
+    echo "  --no-auto-frontend         禁用前端自动更新检测"
     echo "  -h, --help                 显示此帮助信息"
     echo ""
     echo "示例:"
-    echo "  $0                         # 使用默认配置运行"
-    echo "  $0 -f -b                   # 重新构建前端和 release 版本"
+    echo "  $0                         # 使用默认配置运行（自动检测前端更新）"
+    echo "  $0 -f -b                   # 强制重新构建前端和 release 版本"
+    echo "  $0 --no-auto-frontend      # 禁用前端自动更新检测"
     echo "  $0 -c my-config.json       # 使用自定义配置文件"
     exit 0
 }
@@ -60,6 +87,10 @@ while [[ $# -gt 0 ]]; do
             SKIP_BUILD=true
             shift
             ;;
+        --no-auto-frontend)
+            AUTO_DETECT_FRONTEND=false
+            shift
+            ;;
         -h|--help)
             print_help
             ;;
@@ -81,6 +112,14 @@ if [ ! -f "$CREDENTIALS_FILE" ]; then
     echo -e "${RED}错误: 凭据文件 $CREDENTIALS_FILE 不存在${NC}"
     echo "请创建凭据文件或使用 -r 指定其他凭据文件"
     exit 1
+fi
+
+# 自动检测前端更新
+if [ "$BUILD_FRONTEND" = false ] && [ "$AUTO_DETECT_FRONTEND" = true ] && [ "$SKIP_BUILD" = false ]; then
+    if check_frontend_updates; then
+        echo -e "${YELLOW}==> 自动检测到前端需要更新${NC}"
+        BUILD_FRONTEND=true
+    fi
 fi
 
 # 构建前端
