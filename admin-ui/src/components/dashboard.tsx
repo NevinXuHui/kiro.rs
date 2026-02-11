@@ -353,11 +353,11 @@ export function Dashboard({ onLogout }: DashboardProps) {
     }
 
     const ids = currentCredentials
-      .filter(credential => !credential.disabled)
+      .filter(credential => !credential.disabled && !balanceMap.has(credential.id))
       .map(credential => credential.id)
 
     if (ids.length === 0) {
-      toast.error('当前页没有可查询的启用凭据')
+      toast.info('当前页凭据余额均已缓存')
       return
     }
 
