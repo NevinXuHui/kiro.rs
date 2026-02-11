@@ -135,6 +135,7 @@ export interface CreateApiKeyResponse {
 
 // 更新 API Key 请求
 export interface UpdateApiKeyRequest {
+  key?: string
   label?: string
   readOnly?: boolean
   allowedModels?: string[] | null

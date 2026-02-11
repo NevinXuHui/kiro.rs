@@ -204,6 +204,7 @@ impl ApiKeyStore {
     pub fn update(
         &mut self,
         id: u64,
+        key: Option<String>,
         label: Option<String>,
         read_only: Option<bool>,
         allowed_models: Option<Option<Vec<String>>>,
@@ -216,6 +217,12 @@ impl ApiKeyStore {
             .find(|e| e.id == id)
             .ok_or_else(|| format!("API Key #{} 不存在", id))?;
 
+        if let Some(k) = key {
+            let k = k.trim().to_string();
+            if !k.is_empty() {
+                entry.key = k;
+            }
+        }
         if let Some(l) = label {
             entry.label = l;
         }

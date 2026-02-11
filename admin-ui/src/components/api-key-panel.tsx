@@ -23,6 +23,7 @@ export function ApiKeyPanel() {
   // 表单状态
   const [formLabel, setFormLabel] = useState('')
   const [formKey, setFormKey] = useState('')
+  const [formEditKey, setFormEditKey] = useState('')
   const [formReadOnly, setFormReadOnly] = useState(false)
   const [formAllowedModels, setFormAllowedModels] = useState<string[]>([])
   const [formDisabled, setFormDisabled] = useState(false)
@@ -37,6 +38,7 @@ export function ApiKeyPanel() {
   const resetForm = () => {
     setFormLabel('')
     setFormKey('')
+    setFormEditKey('')
     setFormReadOnly(false)
     setFormAllowedModels([])
     setFormDisabled(false)
@@ -53,6 +55,7 @@ export function ApiKeyPanel() {
   const openEditDialog = (apiKey: ApiKeyEntryView) => {
     setEditingKey(apiKey)
     setFormLabel(apiKey.label)
+    setFormEditKey('')
     setFormReadOnly(apiKey.readOnly)
     setFormAllowedModels(apiKey.allowedModels || [])
     setFormDisabled(apiKey.disabled)
@@ -100,6 +103,7 @@ export function ApiKeyPanel() {
     updateMutation.mutate(
       {
         id: editingKey.id,
+        key: formEditKey.trim() || undefined,
         label: formLabel.trim(),
         readOnly: formReadOnly,
         allowedModels,
@@ -238,6 +242,15 @@ export function ApiKeyPanel() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">{apiKey.key}</code>
                           <span className="text-xs whitespace-nowrap">({apiKey.keyLength} 字符)</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-5 w-5"
+                            onClick={() => copyToClipboard(apiKey.key)}
+                            title="复制 Key"
+                          >
+                            <Copy className="h-3 w-3" />
+                          </Button>
                         </div>
                         {apiKey.allowedModels && apiKey.allowedModels.length > 0 && (
                           <div className="text-xs break-words">
@@ -392,6 +405,14 @@ export function ApiKeyPanel() {
                 value={formLabel}
                 onChange={(e) => setFormLabel(e.target.value)}
                 placeholder="例如: Claude Code"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">修改 Key（留空保持不变）</label>
+              <Input
+                value={formEditKey}
+                onChange={(e) => setFormEditKey(e.target.value)}
+                placeholder={editingKey?.key || 'sk-...'}
               />
             </div>
             <div className="flex items-center justify-between">

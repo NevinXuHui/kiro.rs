@@ -280,6 +280,7 @@ pub struct CreateApiKeyResponse {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateApiKeyRequest {
+    pub key: Option<String>,
     pub label: Option<String>,
     pub read_only: Option<bool>,
     pub allowed_models: Option<Option<Vec<String>>>,

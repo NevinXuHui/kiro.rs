@@ -281,6 +281,7 @@ pub async fn update_api_key(
             let mut store = store.write();
             match store.update(
                 id,
+                payload.key,
                 payload.label,
                 payload.read_only,
                 payload.allowed_models,
@@ -340,7 +341,11 @@ pub async fn delete_api_key(
 
 /// 自动生成 API Key
 fn generate_api_key() -> String {
-    format!("sk-{}", uuid::Uuid::new_v4().to_string().replace('-', ""))
+    let mut bytes = [0u8; 24];
+    for b in &mut bytes {
+        *b = fastrand::u8(..);
+    }
+    format!("sk-{}", hex::encode(bytes))
 }
 
 // ============ 代理配置 ============
