@@ -229,16 +229,16 @@ export function TokenUsagePanel() {
             <p className="text-sm text-muted-foreground">暂无请求记录</p>
           ) : (
             <>
-            <div className="overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0">
-              <table className="w-full text-[11px] sm:text-sm">
+            <div className="overflow-x-auto max-w-full" style={{ WebkitOverflowScrolling: 'touch' }}>
+              <table className="text-[11px] sm:text-sm sm:w-full">
                 <thead>
                   <tr className="border-b text-muted-foreground">
-                    <th className="text-left py-1.5 sm:py-2 pr-2 sm:pr-4 font-medium">时间</th>
-                    <th className="text-left py-1.5 sm:py-2 pr-2 sm:pr-4 font-medium">模型</th>
-                    <th className="text-right py-1.5 sm:py-2 pr-2 sm:pr-4 font-medium">输入</th>
-                    <th className="text-right py-1.5 sm:py-2 pr-2 sm:pr-4 font-medium">输出</th>
-                    <th className="text-left py-1.5 sm:py-2 pr-1 sm:pr-2 font-medium">Key</th>
-                    <th className="text-right py-1.5 sm:py-2 font-medium hidden sm:table-cell">凭据</th>
+                    <th className="text-left py-1 sm:py-1.5 pr-3 font-medium whitespace-nowrap">时间</th>
+                    <th className="text-left py-1 sm:py-1.5 pr-3 font-medium whitespace-nowrap">模型</th>
+                    <th className="text-right py-1 sm:py-1.5 pr-3 font-medium whitespace-nowrap">输入</th>
+                    <th className="text-right py-1 sm:py-1.5 pr-3 font-medium whitespace-nowrap">输出</th>
+                    <th className="text-center py-1 sm:py-1.5 pr-3 font-medium whitespace-nowrap">Key</th>
+                    <th className="text-right py-1 sm:py-1.5 font-medium whitespace-nowrap">凭据</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -248,18 +248,18 @@ export function TokenUsagePanel() {
                     const apiKeyLabel = req.apiKeyId ? apiKeyMap.get(req.apiKeyId) : null
                     return (
                       <tr key={idx} className="border-b last:border-0">
-                        <td className="py-1.5 sm:py-2 pr-2 sm:pr-4 text-muted-foreground whitespace-nowrap">{timeStr}</td>
-                        <td className="py-1.5 sm:py-2 pr-2 sm:pr-4 truncate max-w-[80px] sm:max-w-[200px]" title={req.model}>{req.model}</td>
-                        <td className="py-1.5 sm:py-2 pr-2 sm:pr-4 text-right text-blue-600">{formatNumber(req.inputTokens)}</td>
-                        <td className="py-1.5 sm:py-2 pr-2 sm:pr-4 text-right text-green-600">{formatNumber(req.outputTokens)}</td>
-                        <td className="py-1.5 sm:py-2 pr-1 sm:pr-2">
+                        <td className="py-1 sm:py-1.5 pr-3 text-muted-foreground whitespace-nowrap">{timeStr}</td>
+                        <td className="py-1 sm:py-1.5 pr-3 whitespace-nowrap" title={req.model}>{req.model}</td>
+                        <td className="py-1 sm:py-1.5 pr-3 text-right text-blue-600 whitespace-nowrap">{formatNumber(req.inputTokens)}</td>
+                        <td className="py-1 sm:py-1.5 pr-3 text-right text-green-600 whitespace-nowrap">{formatNumber(req.outputTokens)}</td>
+                        <td className="py-1 sm:py-1.5 pr-3 text-center whitespace-nowrap">
                           {apiKeyLabel ? (
                             <Badge variant="secondary" className="text-[10px] sm:text-xs px-1 py-0">{apiKeyLabel}</Badge>
                           ) : (
                             <span className="text-muted-foreground">-</span>
                           )}
                         </td>
-                        <td className="py-1.5 sm:py-2 text-right hidden sm:table-cell">#{req.credentialId}</td>
+                        <td className="py-1 sm:py-1.5 text-right whitespace-nowrap">#{req.credentialId}</td>
                       </tr>
                     )
                   })}
