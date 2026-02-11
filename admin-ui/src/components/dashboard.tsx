@@ -605,10 +605,10 @@ export function Dashboard({ onLogout }: DashboardProps) {
             </CardHeader>
             <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
               <div className="text-xl sm:text-2xl font-bold text-blue-600">
-                {totalRemaining.toFixed(1)}
+                ${totalRemaining.toFixed(1)}
               </div>
               <div className="text-[10px] sm:text-xs text-muted-foreground">
-                / {totalLimit.toFixed(1)}
+                / ${totalLimit.toFixed(1)}
                 {balanceLoadedCount < enabledCount && (
                   <span className="ml-1">({balanceLoadedCount}/{enabledCount})</span>
                 )}
