@@ -15,5 +15,5 @@
   "proxyUsername": null,
   "proxyPassword": null,
   "adminApiKey": "sk-admin123",
-  "loadBalancingMode": "balanced"
+  "loadBalancingMode": "priority"
 }
