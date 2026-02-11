@@ -11,7 +11,7 @@
   "countTokensApiUrl": null,
   "countTokensApiKey": null,
   "countTokensAuthType": "x-api-key",
-  "proxyUrl": null,
+  "proxyUrl": "http://127.0.0.1:7890",
   "proxyUsername": null,
   "proxyPassword": null,
   "adminApiKey": "sk-admin123",
