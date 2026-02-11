@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>API Key 使用统计</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwindcss.config={darkMode:'class'}</script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  .spinner { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+<div id="app" class="max-w-4xl mx-auto px-4 py-6 sm:py-10">
+
+  <!-- 登录区域 -->
+  <div id="login-section">
+    <div class="text-center mb-8">
+      <h1 class="text-2xl font-bold text-gray-900">API Key 使用统计</h1>
+      <p class="text-sm text-gray-500 mt-1">输入你的 API Key 查看使用情况</p>
+    </div>
+    <div class="max-w-md mx-auto bg-white rounded-lg border p-6 shadow-sm">
+      <label class="block text-sm font-medium text-gray-700 mb-2">API Key</label>
+      <input id="key-input" type="password" placeholder="sk-..."
+        class="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        onkeydown="if(event.key==='Enter')doLogin()">
+      <button onclick="doLogin()" id="login-btn"
+        class="w-full mt-4 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+        查询
+      </button>
+      <p id="login-error" class="text-red-500 text-xs mt-2 hidden"></p>
+    </div>
+  </div>
+
+  <!-- 主内容区域（登录后显示） -->
+  <div id="main-section" class="hidden">
+    <!-- 顶栏 -->
+    <div class="flex items-center justify-between mb-4">
+      <h1 class="text-lg font-bold text-gray-900">API Key 使用统计</h1>
+      <div class="flex items-center gap-2">
+        <span id="key-label" class="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded"></span>
+        <button onclick="refreshData()" id="refresh-btn"
+          class="px-3 py-1.5 text-xs border rounded-md hover:bg-gray-50 disabled:opacity-50">
+          刷新
+        </button>
+        <button onclick="doLogout()"
+          class="px-3 py-1.5 text-xs border rounded-md hover:bg-gray-50 text-gray-600">
+          退出
+        </button>
+      </div>
+    </div>
+
+    <!-- Tab 栏 -->
+    <div class="flex border-b mb-4">
+      <button onclick="switchTab('usage')" id="tab-usage"
+        class="px-4 py-2 text-sm font-medium border-b-2 border-blue-600 text-blue-600">
+        Token 统计
+      </button>
+      <button onclick="switchTab('test')" id="tab-test"
+        class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">
+        连通性测试
+      </button>
+    </div>
+
+    <!-- Token 统计 Tab -->
+    <div id="panel-usage">
+      <!-- 统计卡片 -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <div class="bg-white rounded-lg border p-3 sm:p-4">
+          <div class="text-xs text-gray-500 mb-1">总请求数</div>
+          <div class="text-xl sm:text-2xl font-bold" id="stat-requests">-</div>
+        </div>
+        <div class="bg-white rounded-lg border p-3 sm:p-4">
+          <div class="text-xs text-gray-500 mb-1">输入 Tokens</div>
+          <div class="text-xl sm:text-2xl font-bold text-blue-600" id="stat-input">-</div>
+        </div>
+        <div class="bg-white rounded-lg border p-3 sm:p-4">
+          <div class="text-xs text-gray-500 mb-1">输出 Tokens</div>
+          <div class="text-xl sm:text-2xl font-bold text-green-600" id="stat-output">-</div>
+        </div>
+        <div class="bg-white rounded-lg border p-3 sm:p-4">
+          <div class="text-xs text-gray-500 mb-1">总 Tokens</div>
+          <div class="text-xl sm:text-2xl font-bold" id="stat-total">-</div>
+        </div>
+      </div>
+
+      <!-- 按模型分组 -->
+      <div class="bg-white rounded-lg border p-4 mb-4">
+        <h3 class="text-sm font-medium mb-3">按模型分组</h3>
+        <div id="model-list" class="space-y-2 text-sm">
+          <p class="text-gray-400 text-xs">暂无数据</p>
+        </div>
+      </div>
+
+      <!-- 最近请求 -->
+      <div class="bg-white rounded-lg border p-4">
+        <h3 class="text-sm font-medium mb-3">最近请求 <span id="req-count" class="text-gray-400 font-normal"></span></h3>
+        <div class="overflow-x-auto" style="-webkit-overflow-scrolling:touch">
+          <table class="w-full text-xs sm:text-sm">
+            <thead>
+              <tr class="border-b text-gray-500">
+                <th class="text-left py-1.5 pr-3 font-medium">时间</th>
+                <th class="text-left py-1.5 pr-3 font-medium">模型</th>
+                <th class="text-right py-1.5 pr-3 font-medium">输入</th>
+                <th class="text-right py-1.5 font-medium">输出</th>
+              </tr>
+            </thead>
+            <tbody id="req-table"></tbody>
+          </table>
+        </div>
+        <!-- 分页 -->
+        <div id="pagination" class="hidden flex items-center justify-between pt-3 border-t mt-3">
+          <span class="text-xs text-gray-400" id="page-info"></span>
+          <div class="flex items-center gap-2">
+            <select id="page-size" class="h-7 text-xs border rounded px-1 bg-white" onchange="changePageSize()">
+              <option value="10">10 条/页</option>
+              <option value="20" selected>20 条/页</option>
+              <option value="50">50 条/页</option>
+            </select>
+            <button onclick="prevPage()" id="btn-prev" class="h-7 w-7 border rounded text-xs disabled:opacity-30">&lt;</button>
+            <span class="text-xs" id="page-num"></span>
+            <button onclick="nextPage()" id="btn-next" class="h-7 w-7 border rounded text-xs disabled:opacity-30">&gt;</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 连通性测试 Tab -->
+    <div id="panel-test" class="hidden">
+      <div class="grid gap-3 md:grid-cols-2">
+        <!-- Anthropic 模式 -->
+        <div class="bg-white rounded-lg border p-4">
+          <div class="flex items-center gap-2 mb-1">
+            <h3 class="text-sm font-medium">Anthropic 模式</h3>
+            <span class="text-[10px] border rounded px-1.5 py-0.5 text-gray-500 font-mono">/v1/messages</span>
+          </div>
+          <p class="text-xs text-gray-400 mb-3">测试 Anthropic 兼容接口的上游连通性</p>
+          <button onclick="runConnTest('anthropic')" id="btn-test-anthropic"
+            class="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:opacity-50 w-full sm:w-auto">
+            开始测试
+          </button>
+          <div id="steps-anthropic" class="mt-3 space-y-1.5 text-xs hidden"></div>
+          <div id="result-anthropic" class="mt-3 hidden"></div>
+        </div>
+        <!-- OpenAI 模式 -->
+        <div class="bg-white rounded-lg border p-4">
+          <div class="flex items-center gap-2 mb-1">
+            <h3 class="text-sm font-medium">OpenAI 模式</h3>
+            <span class="text-[10px] border rounded px-1.5 py-0.5 text-gray-500 font-mono">/v1/chat/completions</span>
+          </div>
+          <p class="text-xs text-gray-400 mb-3">测试 OpenAI 兼容接口的上游连通性</p>
+          <button onclick="runConnTest('openai')" id="btn-test-openai"
+            class="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:opacity-50 w-full sm:w-auto">
+            开始测试
+          </button>
+          <div id="steps-openai" class="mt-3 space-y-1.5 text-xs hidden"></div>
+          <div id="result-openai" class="mt-3 hidden"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let apiKey = '', usageData = null, allRequests = [], currentPage = 1, pageSize = 20;
+
+function fmt(n) { return n == null ? '-' : n.toLocaleString(); }
+
+function switchTab(tab) {
+  document.getElementById('panel-usage').classList.toggle('hidden', tab !== 'usage');
+  document.getElementById('panel-test').classList.toggle('hidden', tab !== 'test');
+  document.getElementById('tab-usage').classList.toggle('border-blue-600', tab === 'usage');
+  document.getElementById('tab-usage').classList.toggle('text-blue-600', tab === 'usage');
+  document.getElementById('tab-usage').classList.toggle('border-transparent', tab !== 'usage');
+  document.getElementById('tab-usage').classList.toggle('text-gray-500', tab !== 'usage');
+  document.getElementById('tab-test').classList.toggle('border-blue-600', tab === 'test');
+  document.getElementById('tab-test').classList.toggle('text-blue-600', tab === 'test');
+  document.getElementById('tab-test').classList.toggle('border-transparent', tab !== 'test');
+  document.getElementById('tab-test').classList.toggle('text-gray-500', tab !== 'test');
+}
+
+async function apiFetch(url) {
+  const res = await fetch(url, { headers: { 'x-api-key': apiKey } });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+async function doLogin() {
+  const input = document.getElementById('key-input');
+  const errEl = document.getElementById('login-error');
+  const btn = document.getElementById('login-btn');
+  apiKey = input.value.trim();
+  if (!apiKey) { errEl.textContent = '请输入 API Key'; errEl.classList.remove('hidden'); return; }
+  btn.disabled = true; btn.textContent = '查询中...';
+  errEl.classList.add('hidden');
+  try {
+    usageData = await apiFetch('/api/user/usage');
+    document.getElementById('login-section').classList.add('hidden');
+    document.getElementById('main-section').classList.remove('hidden');
+    document.getElementById('key-label').textContent = apiKey.slice(0, 8) + '***';
+    renderUsage();
+  } catch (e) {
+    errEl.textContent = e.message; errEl.classList.remove('hidden');
+  } finally { btn.disabled = false; btn.textContent = '查询'; }
+}
+
+function doLogout() {
+  apiKey = ''; usageData = null;
+  document.getElementById('key-input').value = '';
+  document.getElementById('main-section').classList.add('hidden');
+  document.getElementById('login-section').classList.remove('hidden');
+}
+
+async function refreshData() {
+  const btn = document.getElementById('refresh-btn');
+  btn.disabled = true; btn.textContent = '刷新中...';
+  try {
+    usageData = await apiFetch('/api/user/usage');
+    renderUsage();
+  } catch (e) { alert('刷新失败: ' + e.message); }
+  finally { btn.disabled = false; btn.textContent = '刷新'; }
+}
+
+function renderUsage() {
+  if (!usageData) return;
+  const d = usageData;
+  document.getElementById('stat-requests').textContent = fmt(d.totalRequests);
+  document.getElementById('stat-input').textContent = fmt(d.totalInputTokens);
+  document.getElementById('stat-output').textContent = fmt(d.totalOutputTokens);
+  document.getElementById('stat-total').textContent = fmt(d.totalInputTokens + d.totalOutputTokens);
+
+  // 按模型分组
+  const models = Object.entries(d.byModel || {}).sort((a, b) =>
+    (b[1].inputTokens + b[1].outputTokens) - (a[1].inputTokens + a[1].outputTokens));
+  const ml = document.getElementById('model-list');
+  if (models.length === 0) { ml.innerHTML = '<p class="text-gray-400 text-xs">暂无数据</p>'; }
+  else {
+    ml.innerHTML = models.map(([m, s]) => `
+      <div class="flex items-center justify-between">
+        <div><div class="font-medium truncate" title="${m}">${m}</div>
+          <div class="text-xs text-gray-400"><span class="text-blue-500">${fmt(s.inputTokens)} in</span> / <span class="text-green-500">${fmt(s.outputTokens)} out</span></div>
+        </div>
+        <span class="ml-2 text-xs border rounded px-1.5 py-0.5 text-gray-500 shrink-0">${s.requests} 次</span>
+      </div>`).join('');
+  }
+
+  // 最近请求
+  allRequests = [...(d.recentRequests || [])].reverse();
+  currentPage = 1;
+  renderTable();
+}
+
+function renderTable() {
+  const total = allRequests.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  if (currentPage > totalPages) currentPage = totalPages;
+  const start = (currentPage - 1) * pageSize;
+  const page = allRequests.slice(start, start + pageSize);
+
+  document.getElementById('req-count').textContent = total > 0 ? `（共 ${total} 条）` : '';
+  const tbody = document.getElementById('req-table');
+  if (page.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="py-4 text-center text-gray-400 text-xs">暂无请求记录</td></tr>';
+    document.getElementById('pagination').classList.add('hidden');
+    return;
+  }
+  tbody.innerHTML = page.map(r => {
+    const t = new Date(r.timestamp).toLocaleTimeString('zh-CN', { hour12: false });
+    return `<tr class="border-b last:border-0">
+      <td class="py-1.5 pr-3 text-gray-400 whitespace-nowrap">${t}</td>
+      <td class="py-1.5 pr-3 whitespace-nowrap">${r.model}</td>
+      <td class="py-1.5 pr-3 text-right text-blue-600 whitespace-nowrap">${fmt(r.inputTokens)}</td>
+      <td class="py-1.5 text-right text-green-600 whitespace-nowrap">${fmt(r.outputTokens)}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('pagination').classList.remove('hidden');
+  document.getElementById('page-info').textContent = `第 ${start + 1}-${Math.min(start + pageSize, total)} 条，共 ${total} 条`;
+  document.getElementById('page-num').textContent = `${currentPage} / ${totalPages}`;
+  document.getElementById('btn-prev').disabled = currentPage <= 1;
+  document.getElementById('btn-next').disabled = currentPage >= totalPages;
+}
+
+function prevPage() { currentPage--; renderTable(); }
+function nextPage() { currentPage++; renderTable(); }
+function changePageSize() { pageSize = +document.getElementById('page-size').value; currentPage = 1; renderTable(); }
+
+const STEP_LABELS = ['初始化测试参数', '连接上游服务', '等待模型响应', '解析返回结果'];
+
+function renderSteps(el, active, errorAt) {
+  el.classList.remove('hidden');
+  el.innerHTML = STEP_LABELS.map((label, i) => {
+    let icon, cls;
+    if (errorAt != null && i === errorAt) { icon = '✗'; cls = 'text-red-500'; }
+    else if (errorAt != null && i > errorAt) { icon = '○'; cls = 'text-gray-300'; }
+    else if (i < active || (errorAt == null && active >= STEP_LABELS.length)) { icon = '✓'; cls = 'text-green-500'; }
+    else if (i === active) { icon = '⟳'; cls = 'text-blue-500'; }
+    else { icon = '○'; cls = 'text-gray-300'; }
+    return `<div class="flex items-center gap-2"><span class="${cls}">${icon}</span><span class="${cls}">${label}</span></div>`;
+  }).join('');
+}
+
+function renderTestResult(el, r) {
+  el.classList.remove('hidden');
+  const bg = r.success ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50';
+  const icon = r.success ? '✅' : '❌';
+  const label = r.success ? '连接成功' : '连接失败';
+  const labelCls = r.success ? 'text-green-700' : 'text-red-700';
+  let details = '';
+  if (r.latencyMs > 0) details += `<div>⏱ 延迟: ${r.latencyMs} ms</div>`;
+  if (r.credentialId != null) details += `<div># 凭据: #${r.credentialId}</div>`;
+  if (r.model) details += `<div>模型: ${r.model}</div>`;
+  if (r.inputTokens != null || r.outputTokens != null) {
+    details += '<div class="flex gap-3">';
+    if (r.inputTokens != null) details += `<span class="text-blue-600">输入: ${r.inputTokens}</span>`;
+    if (r.outputTokens != null) details += `<span class="text-green-600">输出: ${r.outputTokens}</span>`;
+    details += '</div>';
+  }
+  if (r.reply) details += `<div class="mt-2 rounded border bg-white p-2"><div class="text-[10px] text-gray-400 mb-1">💬 模型回复</div><p class="text-xs whitespace-pre-wrap break-all">${r.reply}</p></div>`;
+  if (r.error) details += `<div class="text-red-600 break-all">${r.error}</div>`;
+  el.innerHTML = `<div class="rounded-md border p-3 text-xs space-y-2 ${bg}"><div class="flex items-center gap-1.5 font-medium ${labelCls}">${icon} ${label}</div><div class="space-y-1 text-gray-500">${details}</div></div>`;
+}
+
+async function runConnTest(mode) {
+  const btn = document.getElementById('btn-test-' + mode);
+  const stepsEl = document.getElementById('steps-' + mode);
+  const resultEl = document.getElementById('result-' + mode);
+  btn.disabled = true; btn.textContent = '测试中...';
+  resultEl.classList.add('hidden');
+  renderSteps(stepsEl, 0);
+
+  const timers = [
+    setTimeout(() => renderSteps(stepsEl, 1), 400),
+    setTimeout(() => renderSteps(stepsEl, 2), 1000),
+  ];
+
+  try {
+    const res = await fetch('/api/user/connectivity/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
+      body: JSON.stringify({ mode }),
+    });
+    timers.forEach(clearTimeout);
+    renderSteps(stepsEl, 3);
+    const data = await res.json();
+    setTimeout(() => {
+      renderSteps(stepsEl, 4, data.success ? null : 3);
+      renderTestResult(resultEl, data);
+    }, 300);
+  } catch (e) {
+    timers.forEach(clearTimeout);
+    renderSteps(stepsEl, 2, 2);
+    renderTestResult(resultEl, { success: false, mode, latencyMs: 0, error: e.message });
+  } finally {
+    btn.disabled = false; btn.textContent = '开始测试';
+  }
+}
+</script>
+</body>
+</html>

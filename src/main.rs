@@ -8,6 +8,8 @@ mod kiro;
 mod model;
 pub mod token;
 pub mod token_usage;
+mod user_api;
+mod user_ui;
 
 use std::sync::Arc;
 
@@ -134,6 +136,16 @@ async fn main() {
         Some(token_usage_tracker.clone()),
     );
 
+    // 构建 User API 路由（始终启用，通过用户自身 API Key 认证）
+    let user_api_state = user_api::UserApiState {
+        api_key_store: api_key_store.clone(),
+        token_usage_tracker: token_usage_tracker.clone(),
+        kiro_provider: Some(kiro_provider_admin.clone()),
+        profile_arn: first_credentials.profile_arn.clone(),
+    };
+    let user_api_app = user_api::create_user_api_router(user_api_state);
+    let user_ui_app = user_ui::create_user_ui_router();
+
     // 构建 Admin API 路由（如果配置了非空的 admin_api_key）
     // 安全检查：空字符串被视为未配置，防止空 key 绕过认证
     let admin_key_valid = config
@@ -164,9 +176,13 @@ async fn main() {
             anthropic_app
                 .nest("/api/admin", admin_app)
                 .nest("/admin", admin_ui_app)
+                .nest("/api/user", user_api_app)
+                .nest("/user", user_ui_app)
         }
     } else {
         anthropic_app
+            .nest("/api/user", user_api_app)
+            .nest("/user", user_ui_app)
     };
 
     // 启动服务器
@@ -195,6 +211,10 @@ async fn main() {
         tracing::info!("Admin UI:");
         tracing::info!("  GET  /admin");
     }
+    tracing::info!("User API:");
+    tracing::info!("  GET  /api/user/usage");
+    tracing::info!("User UI:");
+    tracing::info!("  GET  /user");
 
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();

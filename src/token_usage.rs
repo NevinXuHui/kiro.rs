@@ -193,6 +193,50 @@ impl TokenUsageTracker {
         }
     }
 
+    /// 获取指定 API Key 的统计数据
+    pub fn get_stats_for_api_key(&self, api_key_id: u64) -> TokenUsageResponse {
+        let stats = self.stats.lock();
+        let key_str = api_key_id.to_string();
+
+        // 该 Key 的聚合统计（来自全量累计，准确值）
+        let key_stats = stats.by_api_key.get(&key_str).cloned().unwrap_or_default();
+
+        // 从最近请求中过滤该 Key 的记录
+        let recent: Vec<_> = stats
+            .recent_requests
+            .iter()
+            .filter(|r| r.api_key_id == Some(api_key_id))
+            .cloned()
+            .collect();
+
+        // 从过滤后的最近请求重新计算按模型/凭据分组（近似值）
+        let mut by_model: HashMap<String, GroupTokenStats> = HashMap::new();
+        let mut by_credential: HashMap<String, GroupTokenStats> = HashMap::new();
+        for r in &recent {
+            let m = by_model.entry(r.model.clone()).or_default();
+            m.input_tokens += r.input_tokens as i64;
+            m.output_tokens += r.output_tokens as i64;
+            m.requests += 1;
+
+            let c = by_credential
+                .entry(r.credential_id.to_string())
+                .or_default();
+            c.input_tokens += r.input_tokens as i64;
+            c.output_tokens += r.output_tokens as i64;
+            c.requests += 1;
+        }
+
+        TokenUsageResponse {
+            total_input_tokens: key_stats.input_tokens,
+            total_output_tokens: key_stats.output_tokens,
+            total_requests: key_stats.requests,
+            by_credential,
+            by_model,
+            by_api_key: HashMap::new(),
+            recent_requests: recent,
+        }
+    }
+
     /// 重置所有统计数据
     pub fn reset(&self) {
         {
