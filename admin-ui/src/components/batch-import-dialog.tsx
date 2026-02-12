@@ -22,6 +22,7 @@ interface CredentialInput {
   refreshToken: string
   clientId?: string
   clientSecret?: string
+  region?: string
   authRegion?: string
   apiRegion?: string
   priority?: number
@@ -216,7 +217,7 @@ export function BatchImportDialog({ open, onOpenChange }: BatchImportDialogProps
           const addedCred = await addCredential({
             refreshToken: token,
             authMethod,
-            authRegion: cred.authRegion?.trim() || undefined,
+            authRegion: cred.authRegion?.trim() || cred.region?.trim() || undefined,
             apiRegion: cred.apiRegion?.trim() || undefined,
             clientId,
             clientSecret,
@@ -361,7 +362,7 @@ export function BatchImportDialog({ open, onOpenChange }: BatchImportDialogProps
               JSON 格式凭据
             </label>
             <textarea
-              placeholder={'粘贴 JSON 格式的凭据，支持以下格式：\n\n1. JSON 数组: [{"refreshToken":"...","clientId":"...","clientSecret":"..."}, ...]\n2. 单个对象: {"refreshToken":"...","clientId":"...","clientSecret":"..."}\n3. 每行一个 JSON 对象（NDJSON）:\n{"refreshToken":"...","clientId":"...","clientSecret":"..."}\n{"refreshToken":"...","clientId":"...","clientSecret":"..."}'}
+              placeholder={'粘贴 JSON 格式的凭据，支持以下格式：\n\n1. JSON 数组: [{"refreshToken":"...","clientId":"...","clientSecret":"...","authRegion":"us-east-1","apiRegion":"us-west-2"}, ...]\n2. 单个对象: {"refreshToken":"...","clientId":"...","clientSecret":"...","authRegion":"us-east-1"}\n3. 每行一个 JSON 对象（NDJSON）:\n{"refreshToken":"...","clientId":"...","clientSecret":"..."}\n{"refreshToken":"...","clientId":"...","clientSecret":"..."}\n\n支持 region 字段自动映射为 authRegion'}
               value={jsonInput}
               onChange={(e) => setJsonInput(e.target.value)}
               disabled={importing}

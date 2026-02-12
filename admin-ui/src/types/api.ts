@@ -21,6 +21,8 @@ export interface CredentialStatusItem {
   refreshTokenHash?: string
   successCount: number
   lastUsedAt: string | null
+  hasProxy: boolean
+  proxyUrl?: string
 }
 
 // 余额响应
@@ -67,6 +69,9 @@ export interface AddCredentialRequest {
   authRegion?: string
   apiRegion?: string
   machineId?: string
+  proxyUrl?: string
+  proxyUsername?: string
+  proxyPassword?: string
 }
 
 // 添加凭据响应

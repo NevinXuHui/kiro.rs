@@ -4,19 +4,20 @@
 //! 支持流式和非流式请求
 //! 支持多凭据故障转移和重试
 
-use parking_lot::RwLock;
 use reqwest::Client;
 use reqwest::header::{AUTHORIZATION, CONNECTION, CONTENT_TYPE, HOST, HeaderMap, HeaderValue};
+use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::time::sleep;
 use uuid::Uuid;
 
-use crate::http_client::{SharedProxyConfig, build_client};
+use crate::http_client::{ProxyConfig, build_client};
 use crate::kiro::machine_id;
 use crate::kiro::model::credentials::KiroCredentials;
 use crate::kiro::token_manager::{CallContext, MultiTokenManager};
+use crate::model::config::TlsBackend;
+use parking_lot::Mutex;
 
 /// 每个凭据的最大重试次数
 const MAX_RETRIES_PER_CREDENTIAL: usize = 3;
@@ -30,64 +31,56 @@ const MAX_TOTAL_RETRIES: usize = 9;
 /// 支持多凭据故障转移和重试机制
 pub struct KiroProvider {
     token_manager: Arc<MultiTokenManager>,
-    proxy: SharedProxyConfig,
-    client: RwLock<Client>,
-    /// 缓存的代理版本号，用于检测代理配置变更
-    proxy_version: AtomicU64,
+    /// 全局代理配置（用于凭据无自定义代理时的回退）
+    global_proxy: Option<ProxyConfig>,
+    /// Client 缓存：key = effective proxy config, value = reqwest::Client
+    /// 不同代理配置的凭据使用不同的 Client，共享相同代理的凭据复用 Client
+    client_cache: Mutex<HashMap<Option<ProxyConfig>, Client>>,
+    /// TLS 后端配置
+    tls_backend: TlsBackend,
 }
 
 impl KiroProvider {
     /// 创建新的 KiroProvider 实例
-    #[allow(dead_code)]
     pub fn new(token_manager: Arc<MultiTokenManager>) -> Self {
-        use crate::http_client::SharedProxy;
-        Self::with_proxy(token_manager, SharedProxy::new(None))
+        Self::with_proxy(token_manager, None)
     }
 
     /// 创建带代理配置的 KiroProvider 实例
-    pub fn with_proxy(token_manager: Arc<MultiTokenManager>, proxy: SharedProxyConfig) -> Self {
-        let proxy_cfg = proxy.get();
-        let version = proxy.version();
-        let client = build_client(proxy_cfg.as_ref(), 720, token_manager.config().tls_backend)
+    pub fn with_proxy(token_manager: Arc<MultiTokenManager>, proxy: Option<ProxyConfig>) -> Self {
+        let tls_backend = token_manager.config().tls_backend;
+        // 预热：构建全局代理对应的 Client
+        let initial_client = build_client(proxy.as_ref(), 720, tls_backend)
             .expect("创建 HTTP 客户端失败");
+        let mut cache = HashMap::new();
+        cache.insert(proxy.clone(), initial_client);
 
         Self {
             token_manager,
-            proxy,
-            client: RwLock::new(client),
-            proxy_version: AtomicU64::new(version),
+            global_proxy: proxy,
+            client_cache: Mutex::new(cache),
+            tls_backend,
         }
     }
 
-    /// 获取 HTTP Client（代理变更时自动重建）
-    fn get_client(&self) -> Client {
-        let current_version = self.proxy.version();
-        let cached_version = self.proxy_version.load(Ordering::Relaxed);
-        if current_version != cached_version {
-            let proxy_cfg = self.proxy.get();
-            let tls_backend = self.token_manager.config().tls_backend;
-            if let Ok(new_client) = build_client(proxy_cfg.as_ref(), 720, tls_backend) {
-                *self.client.write() = new_client;
-                self.proxy_version.store(current_version, Ordering::Relaxed);
-                tracing::info!("代理配置已更新，HTTP Client 已重建");
-            }
+    /// 根据凭据的代理配置获取（或创建并缓存）对应的 reqwest::Client
+    fn client_for(&self, credentials: &KiroCredentials) -> anyhow::Result<Client> {
+        let effective = credentials.effective_proxy(self.global_proxy.as_ref());
+        let mut cache = self.client_cache.lock();
+        if let Some(client) = cache.get(&effective) {
+            return Ok(client.clone());
         }
-        self.client.read().clone()
+        let client = build_client(effective.as_ref(), 720, self.tls_backend)?;
+        cache.insert(effective, client.clone());
+        Ok(client)
     }
 
     /// 获取 token_manager 的引用
-    #[allow(dead_code)]
     pub fn token_manager(&self) -> &MultiTokenManager {
         &self.token_manager
     }
 
-    /// 获取当前活跃的凭据 ID（用于统计）
-    pub fn current_credential_id(&self) -> u64 {
-        self.token_manager.snapshot().current_id
-    }
-
     /// 获取 API 基础 URL（使用 config 级 api_region）
-    #[allow(dead_code)]
     pub fn base_url(&self) -> String {
         format!(
             "https://q.{}.amazonaws.com/generateAssistantResponse",
@@ -96,7 +89,6 @@ impl KiroProvider {
     }
 
     /// 获取 MCP API URL（使用 config 级 api_region）
-    #[allow(dead_code)]
     pub fn mcp_url(&self) -> String {
         format!(
             "https://q.{}.amazonaws.com/mcp",
@@ -105,7 +97,6 @@ impl KiroProvider {
     }
 
     /// 获取 API 基础域名（使用 config 级 api_region）
-    #[allow(dead_code)]
     pub fn base_domain(&self) -> String {
         format!("q.{}.amazonaws.com", self.token_manager.config().effective_api_region())
     }
@@ -132,6 +123,23 @@ impl KiroProvider {
             "q.{}.amazonaws.com",
             credentials.effective_api_region(self.token_manager.config())
         )
+    }
+
+    /// 从请求体中提取模型信息
+    ///
+    /// 尝试解析 JSON 请求体，提取 conversationState.currentMessage.userInputMessage.modelId
+    fn extract_model_from_request(request_body: &str) -> Option<String> {
+        use serde_json::Value;
+
+        let json: Value = serde_json::from_str(request_body).ok()?;
+
+        // 尝试提取 conversationState.currentMessage.userInputMessage.modelId
+        json.get("conversationState")?
+            .get("currentMessage")?
+            .get("userInputMessage")?
+            .get("modelId")?
+            .as_str()
+            .map(|s| s.to_string())
     }
 
     /// 构建请求头
@@ -289,7 +297,8 @@ impl KiroProvider {
 
         for attempt in 0..max_retries {
             // 获取调用上下文
-            let ctx = match self.token_manager.acquire_context().await {
+            // MCP 调用（WebSearch 等工具）不涉及模型选择，无需按模型过滤凭据
+            let ctx = match self.token_manager.acquire_context(None).await {
                 Ok(c) => c,
                 Err(e) => {
                     last_error = Some(e);
@@ -308,7 +317,7 @@ impl KiroProvider {
 
             // 发送请求
             let response = match self
-                .get_client()
+                .client_for(&ctx.credentials)?
                 .post(&url)
                 .headers(headers)
                 .body(request_body.to_string())
@@ -416,9 +425,12 @@ impl KiroProvider {
         let mut last_error: Option<anyhow::Error> = None;
         let api_type = if is_stream { "流式" } else { "非流式" };
 
+        // 尝试从请求体中提取模型信息
+        let model = Self::extract_model_from_request(request_body);
+
         for attempt in 0..max_retries {
             // 获取调用上下文（绑定 index、credentials、token）
-            let ctx = match self.token_manager.acquire_context().await {
+            let ctx = match self.token_manager.acquire_context(model.as_deref()).await {
                 Ok(c) => c,
                 Err(e) => {
                     last_error = Some(e);
@@ -437,7 +449,7 @@ impl KiroProvider {
 
             // 发送请求
             let response = match self
-                .get_client()
+                .client_for(&ctx.credentials)?
                 .post(&url)
                 .headers(headers)
                 .body(request_body.to_string())
@@ -630,12 +642,11 @@ impl KiroProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::http_client::SharedProxy;
     use crate::kiro::token_manager::CallContext;
     use crate::model::config::Config;
 
     fn create_test_provider(config: Config, credentials: KiroCredentials) -> KiroProvider {
-        let tm = MultiTokenManager::new(config, vec![credentials], SharedProxy::new(None), None, false).unwrap();
+        let tm = MultiTokenManager::new(config, vec![credentials], None, None, false).unwrap();
         KiroProvider::new(Arc::new(tm))
     }
 
