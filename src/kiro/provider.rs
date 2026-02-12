@@ -80,6 +80,11 @@ impl KiroProvider {
         &self.token_manager
     }
 
+    /// 获取当前使用的凭据 ID
+    pub fn current_credential_id(&self) -> u64 {
+        self.token_manager.current_id()
+    }
+
     /// 获取 API 基础 URL（使用 config 级 api_region）
     pub fn base_url(&self) -> String {
         format!(

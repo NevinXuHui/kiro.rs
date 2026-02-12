@@ -637,6 +637,11 @@ impl MultiTokenManager {
             .unwrap_or_default()
     }
 
+    /// 获取当前活动凭据的 ID
+    pub fn current_id(&self) -> u64 {
+        *self.current_id.lock()
+    }
+
     /// 获取凭据总数
     pub fn total_count(&self) -> usize {
         self.entries.lock().len()
@@ -1315,6 +1320,31 @@ impl MultiTokenManager {
         // 立即按新优先级重新选择当前凭据（无论持久化是否成功）
         self.select_highest_priority();
         // 持久化更改
+        self.persist_credentials()?;
+        Ok(())
+    }
+
+    /// 将凭据设为首选（Admin API）
+    ///
+    /// 将目标凭据的优先级设为 0，其他 priority=0 的凭据提升为 1
+    pub fn set_primary(&self, id: u64) -> anyhow::Result<()> {
+        {
+            let mut entries = self.entries.lock();
+            // 验证目标凭据存在
+            if !entries.iter().any(|e| e.id == id) {
+                anyhow::bail!("凭据不存在: {}", id);
+            }
+            // 将其他 priority=0 的凭据提升为 1
+            for entry in entries.iter_mut() {
+                if entry.id != id && entry.credentials.priority == 0 {
+                    entry.credentials.priority = 1;
+                }
+            }
+            // 目标凭据设为 0
+            let target = entries.iter_mut().find(|e| e.id == id).unwrap();
+            target.credentials.priority = 0;
+        }
+        self.select_highest_priority();
         self.persist_credentials()?;
         Ok(())
     }
