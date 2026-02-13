@@ -143,6 +143,13 @@ if [ ! -d "admin-ui/dist" ] && [ "$SKIP_BUILD" = false ]; then
     echo -e "${GREEN}✓ 前端构建完成${NC}"
 fi
 
+# 修复 cc 被 Claude Code Skills 脚本覆盖的问题
+# 将 /usr/bin 提到 /usr/local/bin 前面，确保 rustc 链接器找到真正的 cc
+if [ -x /usr/bin/cc ] && file /usr/local/bin/cc 2>/dev/null | grep -q "shell script"; then
+    export PATH="/usr/bin:$PATH"
+    export CC=/usr/bin/cc
+fi
+
 # 构建 Rust 项目
 if [ "$SKIP_BUILD" = false ]; then
     if [ "$BUILD_RELEASE" = true ]; then
