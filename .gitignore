@@ -33,3 +33,6 @@
 # 日志文件
 /logs/
 kiro.log
+
+# SSL 证书
+*.pem
