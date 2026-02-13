@@ -42,6 +42,7 @@ pub struct KiroProvider {
 
 impl KiroProvider {
     /// 创建新的 KiroProvider 实例
+    #[allow(dead_code)]
     pub fn new(token_manager: Arc<MultiTokenManager>) -> Self {
         Self::with_proxy(token_manager, None)
     }
@@ -76,6 +77,7 @@ impl KiroProvider {
     }
 
     /// 获取 token_manager 的引用
+    #[allow(dead_code)]
     pub fn token_manager(&self) -> &MultiTokenManager {
         &self.token_manager
     }
@@ -86,6 +88,7 @@ impl KiroProvider {
     }
 
     /// 获取 API 基础 URL（使用 config 级 api_region）
+    #[allow(dead_code)]
     pub fn base_url(&self) -> String {
         format!(
             "https://q.{}.amazonaws.com/generateAssistantResponse",
@@ -94,6 +97,7 @@ impl KiroProvider {
     }
 
     /// 获取 MCP API URL（使用 config 级 api_region）
+    #[allow(dead_code)]
     pub fn mcp_url(&self) -> String {
         format!(
             "https://q.{}.amazonaws.com/mcp",
@@ -102,6 +106,7 @@ impl KiroProvider {
     }
 
     /// 获取 API 基础域名（使用 config 级 api_region）
+    #[allow(dead_code)]
     pub fn base_domain(&self) -> String {
         format!("q.{}.amazonaws.com", self.token_manager.config().effective_api_region())
     }
