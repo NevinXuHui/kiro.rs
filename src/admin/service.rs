@@ -233,6 +233,8 @@ impl AdminService {
             proxy_url: req.proxy_url,
             proxy_username: req.proxy_username,
             proxy_password: req.proxy_password,
+            disabled: false,
+            disabled_reason: None,
         };
 
         // 调用 token_manager 添加凭据

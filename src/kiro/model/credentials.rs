@@ -92,11 +92,25 @@ pub struct KiroCredentials {
     /// 凭据级代理认证密码（可选）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proxy_password: Option<String>,
+
+    /// 是否已禁用（重启后恢复禁用状态）
+    #[serde(default)]
+    #[serde(skip_serializing_if = "is_false")]
+    pub disabled: bool,
+
+    /// 禁用原因（manual / too_many_failures / quota_exceeded）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled_reason: Option<String>,
 }
 
 /// 判断是否为零（用于跳过序列化）
 fn is_zero(value: &u32) -> bool {
     *value == 0
+}
+
+/// 判断是否为 false（用于跳过序列化）
+fn is_false(value: &bool) -> bool {
+    !value
 }
 
 fn canonicalize_auth_method_value(value: &str) -> &str {
@@ -339,6 +353,8 @@ mod tests {
             proxy_url: None,
             proxy_username: None,
             proxy_password: None,
+            disabled: false,
+            disabled_reason: None,
         };
 
         let json = creds.to_pretty_json().unwrap();
@@ -347,6 +363,8 @@ mod tests {
         assert!(!json.contains("refreshToken"));
         // priority 为 0 时不序列化
         assert!(!json.contains("priority"));
+        // disabled 为 false 时不序列化
+        assert!(!json.contains("disabled"));
     }
 
     #[test]
@@ -456,6 +474,8 @@ mod tests {
             proxy_url: None,
             proxy_username: None,
             proxy_password: None,
+            disabled: false,
+            disabled_reason: None,
         };
 
         let json = creds.to_pretty_json().unwrap();
@@ -485,6 +505,8 @@ mod tests {
             proxy_url: None,
             proxy_username: None,
             proxy_password: None,
+            disabled: false,
+            disabled_reason: None,
         };
 
         let json = creds.to_pretty_json().unwrap();
@@ -596,6 +618,8 @@ mod tests {
             proxy_url: None,
             proxy_username: None,
             proxy_password: None,
+            disabled: false,
+            disabled_reason: None,
         };
 
         let json = original.to_pretty_json().unwrap();

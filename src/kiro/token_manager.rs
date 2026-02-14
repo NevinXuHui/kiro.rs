@@ -360,6 +360,27 @@ enum DisabledReason {
     QuotaExceeded,
 }
 
+impl DisabledReason {
+    /// 从持久化字符串还原
+    fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "manual" => Some(Self::Manual),
+            "too_many_failures" => Some(Self::TooManyFailures),
+            "quota_exceeded" => Some(Self::QuotaExceeded),
+            _ => None,
+        }
+    }
+
+    /// 转为持久化字符串
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Manual => "manual",
+            Self::TooManyFailures => "too_many_failures",
+            Self::QuotaExceeded => "quota_exceeded",
+        }
+    }
+}
+
 /// 统计数据持久化条目
 #[derive(Serialize, Deserialize)]
 struct StatsEntry {
@@ -506,10 +527,10 @@ impl MultiTokenManager {
                 }
                 CredentialEntry {
                     id,
+                    disabled: cred.disabled,
+                    disabled_reason: cred.disabled_reason.as_deref().and_then(DisabledReason::from_str),
                     credentials: cred,
                     failure_count: 0,
-                    disabled: false,
-                    disabled_reason: None,
                     success_count: 0,
                     last_used_at: None,
                 }
@@ -528,10 +549,12 @@ impl MultiTokenManager {
             anyhow::bail!("检测到重复的凭据 ID: {:?}", duplicate_ids);
         }
 
-        // 选择初始凭据：优先级最高（priority 最小）的凭据，无凭据时为 0
+        // 选择初始凭据：优先级最高（priority 最小）的未禁用凭据，无可用凭据时回退到第一个
         let initial_id = entries
             .iter()
+            .filter(|e| !e.disabled)
             .min_by_key(|e| e.credentials.priority)
+            .or_else(|| entries.first())
             .map(|e| e.id)
             .unwrap_or(0);
 
@@ -893,7 +916,7 @@ impl MultiTokenManager {
             None => return Ok(false),
         };
 
-        // 收集所有凭据
+        // 收集所有凭据（含禁用状态）
         let credentials: Vec<KiroCredentials> = {
             let entries = self.entries.lock();
             entries
@@ -901,6 +924,9 @@ impl MultiTokenManager {
                 .map(|e| {
                     let mut cred = e.credentials.clone();
                     cred.canonicalize_auth_method();
+                    // 回写运行时禁用状态，确保重启后恢复
+                    cred.disabled = e.disabled;
+                    cred.disabled_reason = e.disabled_reason.map(|r| r.as_str().to_string());
                     cred
                 })
                 .collect()
