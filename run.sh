@@ -19,6 +19,20 @@ BUILD_RELEASE=false
 SKIP_BUILD=false
 AUTO_DETECT_FRONTEND=true
 
+# 检测可用的包管理器（pnpm > yarn > npm）
+detect_pkg_manager() {
+    if command -v pnpm &>/dev/null; then
+        echo "pnpm"
+    elif command -v yarn &>/dev/null; then
+        echo "yarn"
+    elif command -v npm &>/dev/null; then
+        echo "npm"
+    else
+        echo -e "${RED}错误: 未找到 npm/pnpm/yarn，请先安装 Node.js 包管理器${NC}"
+        exit 1
+    fi
+}
+
 # 检测前端是否需要更新
 check_frontend_updates() {
     # 如果 dist 目录不存在，需要构建
@@ -124,21 +138,23 @@ fi
 
 # 构建前端
 if [ "$BUILD_FRONTEND" = true ]; then
-    echo -e "${GREEN}==> 构建前端 Admin UI...${NC}"
+    PKG=$(detect_pkg_manager)
+    echo -e "${GREEN}==> 构建前端 Admin UI (使用 $PKG)...${NC}"
     cd admin-ui
-    pnpm install
-    pnpm build
+    $PKG install
+    $PKG run build
     cd ..
     echo -e "${GREEN}✓ 前端构建完成${NC}"
 fi
 
 # 检查前端是否已构建
 if [ ! -d "admin-ui/dist" ] && [ "$SKIP_BUILD" = false ]; then
+    PKG=$(detect_pkg_manager)
     echo -e "${YELLOW}警告: admin-ui/dist 不存在，需要先构建前端${NC}"
-    echo -e "${YELLOW}正在构建前端...${NC}"
+    echo -e "${YELLOW}正在构建前端 (使用 $PKG)...${NC}"
     cd admin-ui
-    pnpm install
-    pnpm build
+    $PKG install
+    $PKG run build
     cd ..
     echo -e "${GREEN}✓ 前端构建完成${NC}"
 fi
