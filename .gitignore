@@ -1,4 +1,7 @@
-/target
+/target/*
+!/target/release/
+/target/release/*
+!/target/release/kiro-rs
 /CLAUDE.md
 /AGENTS.md
 /config.json
