@@ -5,16 +5,17 @@ const config: CapacitorConfig = {
   appName: 'Kiro Admin',
   webDir: 'dist',
   server: {
-    androidScheme: 'https',
+    androidScheme: 'http',
     cleartext: true,
     allowNavigation: ['*']
   },
   android: {
-    allowMixedContent: true
+    allowMixedContent: true,
+    captureInput: true
   },
   plugins: {
     CapacitorHttp: {
-      enabled: false
+      enabled: true
     },
     SplashScreen: {
       launchShowDuration: 2000,

@@ -4,9 +4,10 @@ import path from 'path'
 
 export default defineConfig({
   plugins: [react()],
+  base: './',
   define: {
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
-    __APP_VERSION__: JSON.stringify('1.0.3'),
+    __APP_VERSION__: JSON.stringify('2.0.3'),
   },
   resolve: {
     alias: {
