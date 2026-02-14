@@ -114,6 +114,7 @@ export interface TokenUsageResponse {
 export interface ApiKeyEntryView {
   id: number
   key: string
+  fullKey: string
   keyLength: number
   label: string
   readOnly: boolean

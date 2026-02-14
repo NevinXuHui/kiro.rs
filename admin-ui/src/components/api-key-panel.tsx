@@ -151,10 +151,26 @@ export function ApiKeyPanel() {
     })
   }
 
-  // 复制到剪贴板
+  // 复制到剪贴板（兼容 HTTP 环境）
   const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-    toast.success('已复制到剪贴板')
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text)
+      toast.success('已复制到剪贴板')
+    } else {
+      const textarea = document.createElement('textarea')
+      textarea.value = text
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.select()
+      try {
+        document.execCommand('copy')
+        toast.success('已复制到剪贴板')
+      } catch {
+        toast.error('复制失败，请手动复制')
+      }
+      document.body.removeChild(textarea)
+    }
   }
 
   // 关闭创建对话框
@@ -246,7 +262,7 @@ export function ApiKeyPanel() {
                             variant="ghost"
                             size="icon"
                             className="h-5 w-5"
-                            onClick={() => copyToClipboard(apiKey.key)}
+                            onClick={() => copyToClipboard(apiKey.fullKey)}
                             title="复制 Key"
                           >
                             <Copy className="h-3 w-3" />

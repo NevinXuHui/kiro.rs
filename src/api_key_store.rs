@@ -55,6 +55,8 @@ pub struct ApiKeyEntryView {
     pub id: u64,
     /// 脱敏后的 Key
     pub key: String,
+    /// 完整 Key（用于复制）
+    pub full_key: String,
     /// Key 长度
     pub key_length: usize,
     pub label: String,
@@ -277,6 +279,7 @@ impl ApiKeyStore {
         ApiKeyEntryView {
             id: entry.id,
             key: mask_key(&entry.key),
+            full_key: entry.key.clone(),
             key_length: entry.key.len(),
             label: entry.label.clone(),
             read_only: entry.read_only,
