@@ -12,12 +12,13 @@ use std::time::Duration;
 use tokio::time::sleep;
 use uuid::Uuid;
 
-use crate::http_client::{ProxyConfig, build_client};
+use crate::http_client::{ProxyConfig, SharedProxyConfig, build_client};
 use crate::kiro::machine_id;
 use crate::kiro::model::credentials::KiroCredentials;
 use crate::kiro::token_manager::{CallContext, MultiTokenManager};
 use crate::model::config::TlsBackend;
 use parking_lot::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// 每个凭据的最大重试次数
 const MAX_RETRIES_PER_CREDENTIAL: usize = 3;
@@ -31,8 +32,10 @@ const MAX_TOTAL_RETRIES: usize = 9;
 /// 支持多凭据故障转移和重试机制
 pub struct KiroProvider {
     token_manager: Arc<MultiTokenManager>,
-    /// 全局代理配置（用于凭据无自定义代理时的回退）
-    global_proxy: Option<ProxyConfig>,
+    /// 共享代理配置（支持热更新）
+    shared_proxy: SharedProxyConfig,
+    /// 上次构建缓存时的代理版本号
+    proxy_version: AtomicU64,
     /// Client 缓存：key = effective proxy config, value = reqwest::Client
     /// 不同代理配置的凭据使用不同的 Client，共享相同代理的凭据复用 Client
     client_cache: Mutex<HashMap<Option<ProxyConfig>, Client>>,
@@ -44,29 +47,46 @@ impl KiroProvider {
     /// 创建新的 KiroProvider 实例
     #[allow(dead_code)]
     pub fn new(token_manager: Arc<MultiTokenManager>) -> Self {
-        Self::with_proxy(token_manager, None)
+        use crate::http_client::SharedProxy;
+        Self::with_proxy(token_manager, SharedProxy::new(None))
     }
 
     /// 创建带代理配置的 KiroProvider 实例
-    pub fn with_proxy(token_manager: Arc<MultiTokenManager>, proxy: Option<ProxyConfig>) -> Self {
+    pub fn with_proxy(token_manager: Arc<MultiTokenManager>, shared_proxy: SharedProxyConfig) -> Self {
         let tls_backend = token_manager.config().tls_backend;
+        let proxy = shared_proxy.get();
+        let version = shared_proxy.version();
         // 预热：构建全局代理对应的 Client
         let initial_client = build_client(proxy.as_ref(), 720, tls_backend)
             .expect("创建 HTTP 客户端失败");
         let mut cache = HashMap::new();
-        cache.insert(proxy.clone(), initial_client);
+        cache.insert(proxy, initial_client);
 
         Self {
             token_manager,
-            global_proxy: proxy,
+            shared_proxy,
+            proxy_version: AtomicU64::new(version),
             client_cache: Mutex::new(cache),
             tls_backend,
         }
     }
 
     /// 根据凭据的代理配置获取（或创建并缓存）对应的 reqwest::Client
+    /// 当全局代理配置变更时自动清空缓存并重建
     fn client_for(&self, credentials: &KiroCredentials) -> anyhow::Result<Client> {
-        let effective = credentials.effective_proxy(self.global_proxy.as_ref());
+        let current_version = self.shared_proxy.version();
+        let cached_version = self.proxy_version.load(Ordering::SeqCst);
+
+        // 代理配置已变更，清空缓存
+        if current_version != cached_version {
+            let mut cache = self.client_cache.lock();
+            cache.clear();
+            self.proxy_version.store(current_version, Ordering::SeqCst);
+            tracing::info!("全局代理配置已变更，已清空 HTTP Client 缓存");
+        }
+
+        let global_proxy = self.shared_proxy.get();
+        let effective = credentials.effective_proxy(global_proxy.as_ref());
         let mut cache = self.client_cache.lock();
         if let Some(client) = cache.get(&effective) {
             return Ok(client.clone());
@@ -656,7 +676,8 @@ mod tests {
     use crate::model::config::Config;
 
     fn create_test_provider(config: Config, credentials: KiroCredentials) -> KiroProvider {
-        let tm = MultiTokenManager::new(config, vec![credentials], None, None, false).unwrap();
+        use crate::http_client::SharedProxy;
+        let tm = MultiTokenManager::new(config, vec![credentials], SharedProxy::new(None), None, false).unwrap();
         KiroProvider::new(Arc::new(tm))
     }
 

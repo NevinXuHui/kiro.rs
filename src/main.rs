@@ -94,13 +94,12 @@ async fn main() {
     }
 
     let shared_proxy = http_client::SharedProxy::new(proxy_config);
-    let proxy_config_for_manager = shared_proxy.get();
 
     // 创建 MultiTokenManager 和 KiroProvider
     let token_manager = MultiTokenManager::new(
         config.clone(),
         credentials_list,
-        proxy_config_for_manager,
+        shared_proxy.clone(),
         Some(credentials_path.into()),
         is_multiple_format,
     )
@@ -109,10 +108,10 @@ async fn main() {
         std::process::exit(1);
     });
     let token_manager = Arc::new(token_manager);
-    let kiro_provider = KiroProvider::with_proxy(token_manager.clone(), shared_proxy.get());
+    let kiro_provider = KiroProvider::with_proxy(token_manager.clone(), shared_proxy.clone());
     // 为 Admin API 连通性测试创建独立的 KiroProvider（共享 token_manager 和 proxy）
     let kiro_provider_admin = Arc::new(
-        KiroProvider::with_proxy(token_manager.clone(), shared_proxy.get()),
+        KiroProvider::with_proxy(token_manager.clone(), shared_proxy.clone()),
     );
 
     // 初始化 count_tokens 配置
