@@ -233,6 +233,7 @@ if [ "$BUILD_RELEASE" = true ] && [ "$SKIP_BUILD" = false ]; then
     ARCH_SUFFIX=$(detect_arch)
     ARCH_BINARY="./target/release/kiro-rs-${ARCH_SUFFIX}"
     cp -f "./target/release/kiro-rs" "$ARCH_BINARY"
+    chmod +x "$ARCH_BINARY"
     ln -sf "kiro-rs-${ARCH_SUFFIX}" "./target/release/kiro-rs"
     echo -e "${GREEN}✓ 架构产物: kiro-rs-${ARCH_SUFFIX}${NC}"
 fi

@@ -90,6 +90,7 @@ info "Rust 项目构建完成"
 ARCH_SUFFIX=$(detect_arch)
 ARCH_BINARY="$PROJECT_DIR/target/release/kiro-rs-${ARCH_SUFFIX}"
 cp -f "$PROJECT_DIR/target/release/kiro-rs" "$ARCH_BINARY"
+chmod +x "$ARCH_BINARY"
 ln -sf "kiro-rs-${ARCH_SUFFIX}" "$PROJECT_DIR/target/release/kiro-rs"
 info "架构产物: kiro-rs-${ARCH_SUFFIX}"
 
