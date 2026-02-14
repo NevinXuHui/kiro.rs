@@ -13,6 +13,17 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   const [apiKey, setApiKey] = useState('')
 
   useEffect(() => {
+    // 支持 URL 参数自动登录 (?key=xxx)
+    const params = new URLSearchParams(window.location.search)
+    const urlKey = params.get('key')
+    if (urlKey) {
+      storage.setApiKey(urlKey)
+      // 清除 URL 参数
+      window.history.replaceState({}, '', window.location.pathname)
+      onLogin(urlKey)
+      return
+    }
+
     // 从 storage 读取保存的 API Key
     const savedKey = storage.getApiKey()
     if (savedKey) {
