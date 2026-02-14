@@ -244,7 +244,7 @@ export function TokenUsagePanel() {
                 <tbody>
                   {recentRequests.map((req, idx) => {
                     const time = new Date(req.timestamp)
-                    const timeStr = time.toLocaleTimeString('zh-CN', { hour12: false })
+                    const timeStr = time.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
                     const apiKeyLabel = req.apiKeyId ? apiKeyMap.get(req.apiKeyId) : null
                     return (
                       <tr key={idx} className="border-b last:border-0">

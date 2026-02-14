@@ -15,9 +15,6 @@ use chrono::Utc;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
-/// 最近请求列表的最大条目数
-const MAX_RECENT_REQUESTS: usize = 200;
-
 /// 持久化 debounce 间隔（秒）
 const SAVE_DEBOUNCE_SECS: u64 = 30;
 
@@ -169,10 +166,7 @@ impl TokenUsageTracker {
                 key_stats.requests += 1;
             }
 
-            // 最近请求（环形缓冲）
-            if stats.recent_requests.len() >= MAX_RECENT_REQUESTS {
-                stats.recent_requests.pop_front();
-            }
+            // 记录最近请求
             stats.recent_requests.push_back(record);
         }
         // 锁已释放，尝试 debounced 持久化
@@ -262,11 +256,7 @@ impl TokenUsageTracker {
         };
 
         match serde_json::from_str::<PersistedStats>(&content) {
-            Ok(mut loaded) => {
-                // 限制 recent_requests 大小（防止旧文件过大）
-                while loaded.recent_requests.len() > MAX_RECENT_REQUESTS {
-                    loaded.recent_requests.pop_front();
-                }
+            Ok(loaded) => {
                 *self.stats.lock() = loaded;
                 *self.last_save.lock() = Some(Instant::now());
                 self.dirty.store(false, Ordering::Relaxed);
