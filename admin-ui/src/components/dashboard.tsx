@@ -838,6 +838,11 @@ export function Dashboard({ onLogout }: DashboardProps) {
         results={verifyResults}
         onCancel={handleCancelVerify}
       />
+
+      {/* 版本信息 */}
+      <div className="text-center text-xs text-muted-foreground py-4">
+        Kiro Admin v{__APP_VERSION__} · Build: {new Date(__BUILD_TIME__).toLocaleString('zh-CN')}
+      </div>
     </div>
   )
 }
