@@ -2,6 +2,7 @@
 !/target/release/
 /target/release/*
 !/target/release/kiro-rs
+!/target/release/kiro-rs-*
 /CLAUDE.md
 /AGENTS.md
 /config.json

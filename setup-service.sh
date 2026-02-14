@@ -13,7 +13,26 @@ NC='\033[0m'
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SERVICE_NAME="kiro-rs"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-BINARY_PATH="$PROJECT_DIR/target/release/kiro-rs"
+
+# 架构检测（含发行版大版本）：优先使用架构匹配的二进制
+detect_arch() {
+    local arch=$(uname -m)
+    local distro="unknown"
+    local ver=""
+    if [[ -f /etc/os-release ]]; then
+        distro=$(. /etc/os-release && echo "${ID}")
+        ver=$(. /etc/os-release && echo "${VERSION_ID%%.*}")
+    fi
+    echo "${arch}-${distro}${ver}"
+}
+
+ARCH_SUFFIX=$(detect_arch)
+ARCH_BINARY="$PROJECT_DIR/target/release/kiro-rs-${ARCH_SUFFIX}"
+if [[ -f "$ARCH_BINARY" ]]; then
+    BINARY_PATH="$ARCH_BINARY"
+else
+    BINARY_PATH="$PROJECT_DIR/target/release/kiro-rs"
+fi
 
 info()  { echo -e "${GREEN}[INFO] $*${NC}"; }
 warn()  { echo -e "${YELLOW}[WARN] $*${NC}"; }
@@ -43,13 +62,15 @@ fi
 # 判断服务是否已存在
 if [[ -f "$SERVICE_FILE" ]]; then
     info "检测到已有 systemd 服务，更新配置..."
-    cp "$PROJECT_DIR/${SERVICE_NAME}.service" "$SERVICE_FILE"
+    sed "s|ExecStart=.*|ExecStart=${BINARY_PATH} -c ${PROJECT_DIR}/config.json --credentials ${PROJECT_DIR}/credentials.json|" \
+        "$PROJECT_DIR/${SERVICE_NAME}.service" > "$SERVICE_FILE"
     systemctl daemon-reload
     info "重启服务..."
     systemctl restart "$SERVICE_NAME"
 else
     info "创建 systemd 服务..."
-    cp "$PROJECT_DIR/${SERVICE_NAME}.service" "$SERVICE_FILE"
+    sed "s|ExecStart=.*|ExecStart=${BINARY_PATH} -c ${PROJECT_DIR}/config.json --credentials ${PROJECT_DIR}/credentials.json|" \
+        "$PROJECT_DIR/${SERVICE_NAME}.service" > "$SERVICE_FILE"
     systemctl daemon-reload
     systemctl enable "$SERVICE_NAME"
     info "启动服务..."

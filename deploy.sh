@@ -25,6 +25,18 @@ info()  { echo -e "${GREEN}[INFO] $*${NC}"; }
 warn()  { echo -e "${YELLOW}[WARN] $*${NC}"; }
 error() { echo -e "${RED}[ERROR] $*${NC}"; exit 1; }
 
+# 架构检测（含发行版大版本）
+detect_arch() {
+    local arch=$(uname -m)
+    local distro="unknown"
+    local ver=""
+    if [[ -f /etc/os-release ]]; then
+        distro=$(. /etc/os-release && echo "${ID}")
+        ver=$(. /etc/os-release && echo "${VERSION_ID%%.*}")
+    fi
+    echo "${arch}-${distro}${ver}"
+}
+
 # 检查 root 权限
 [[ $EUID -ne 0 ]] && error "请使用 root 权限运行此脚本"
 
@@ -74,12 +86,22 @@ cd "$PROJECT_DIR"
 "${RUN_AS[@]}" cargo build --release
 info "Rust 项目构建完成"
 
+# 复制架构产物 + 创建符号链接
+ARCH_SUFFIX=$(detect_arch)
+ARCH_BINARY="$PROJECT_DIR/target/release/kiro-rs-${ARCH_SUFFIX}"
+cp -f "$PROJECT_DIR/target/release/kiro-rs" "$ARCH_BINARY"
+ln -sf "kiro-rs-${ARCH_SUFFIX}" "$PROJECT_DIR/target/release/kiro-rs"
+info "架构产物: kiro-rs-${ARCH_SUFFIX}"
+
 # ── 2. 创建日志目录 ─────────────────────────────────────
 mkdir -p "$PROJECT_DIR/logs"
 
 # ── 3. 部署 systemd 服务 ────────────────────────────────
 info "部署 systemd 服务..."
-cp "$PROJECT_DIR/$SERVICE_NAME.service" "/etc/systemd/system/$SERVICE_NAME.service"
+DEPLOY_BINARY="$PROJECT_DIR/target/release/kiro-rs-$(detect_arch)"
+[[ -f "$DEPLOY_BINARY" ]] || DEPLOY_BINARY="$PROJECT_DIR/target/release/kiro-rs"
+sed "s|ExecStart=.*|ExecStart=${DEPLOY_BINARY} -c ${PROJECT_DIR}/config.json --credentials ${PROJECT_DIR}/credentials.json|" \
+    "$PROJECT_DIR/$SERVICE_NAME.service" > "/etc/systemd/system/$SERVICE_NAME.service"
 systemctl daemon-reload
 systemctl enable "$SERVICE_NAME"
 info "systemd 服务已部署并启用"

@@ -166,30 +166,75 @@ if [ -x /usr/bin/cc ] && file /usr/local/bin/cc 2>/dev/null | grep -q "shell scr
     export CC=/usr/bin/cc
 fi
 
+# 架构检测（含发行版大版本）
+detect_arch() {
+    local arch=$(uname -m)
+    local distro="unknown"
+    local ver=""
+    if [[ -f /etc/os-release ]]; then
+        distro=$(. /etc/os-release && echo "${ID}")
+        ver=$(. /etc/os-release && echo "${VERSION_ID%%.*}")
+    fi
+    echo "${arch}-${distro}${ver}"
+}
+
+# 确定二进制路径（优先使用架构匹配的产物）
+if [ "$BUILD_RELEASE" = true ]; then
+    ARCH_SUFFIX=$(detect_arch)
+    ARCH_BINARY="./target/release/kiro-rs-${ARCH_SUFFIX}"
+    if [ -f "$ARCH_BINARY" ]; then
+        BINARY_PATH="$ARCH_BINARY"
+    else
+        BINARY_PATH="./target/release/kiro-rs"
+    fi
+else
+    BINARY_PATH="./target/debug/kiro-rs"
+fi
+
 # 构建 Rust 项目
 if [ "$SKIP_BUILD" = false ]; then
-    if [ "$BUILD_RELEASE" = true ]; then
-        echo -e "${GREEN}==> 构建 Rust 项目 (release 模式)...${NC}"
-        cargo build --release
-        BINARY_PATH="./target/release/kiro-rs"
+    if command -v cargo &>/dev/null; then
+        if [ "$BUILD_RELEASE" = true ]; then
+            echo -e "${GREEN}==> 构建 Rust 项目 (release 模式)...${NC}"
+            cargo build --release
+        else
+            echo -e "${GREEN}==> 构建 Rust 项目 (debug 模式)...${NC}"
+            cargo build
+        fi
+        echo -e "${GREEN}✓ Rust 项目构建完成${NC}"
     else
-        echo -e "${GREEN}==> 构建 Rust 项目 (debug 模式)...${NC}"
-        cargo build
-        BINARY_PATH="./target/debug/kiro-rs"
+        echo -e "${YELLOW}==> cargo 未找到，正在自动安装 Rust 工具链...${NC}"
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        source "$HOME/.cargo/env"
+        if ! command -v cargo &>/dev/null; then
+            echo -e "${RED}错误: Rust 安装失败${NC}"
+            exit 1
+        fi
+        echo -e "${GREEN}✓ Rust 工具链安装完成 ($(rustc --version))${NC}"
+        if [ "$BUILD_RELEASE" = true ]; then
+            echo -e "${GREEN}==> 构建 Rust 项目 (release 模式)...${NC}"
+            cargo build --release
+        else
+            echo -e "${GREEN}==> 构建 Rust 项目 (debug 模式)...${NC}"
+            cargo build
+        fi
+        echo -e "${GREEN}✓ Rust 项目构建完成${NC}"
     fi
-    echo -e "${GREEN}✓ Rust 项目构建完成${NC}"
 else
-    if [ "$BUILD_RELEASE" = true ]; then
-        BINARY_PATH="./target/release/kiro-rs"
-    else
-        BINARY_PATH="./target/debug/kiro-rs"
-    fi
-    
     if [ ! -f "$BINARY_PATH" ]; then
         echo -e "${RED}错误: 二进制文件 $BINARY_PATH 不存在${NC}"
         echo "请先构建项目或移除 -s 选项"
         exit 1
     fi
+fi
+
+# release 模式下：复制架构产物 + 创建符号链接
+if [ "$BUILD_RELEASE" = true ] && [ "$SKIP_BUILD" = false ]; then
+    ARCH_SUFFIX=$(detect_arch)
+    ARCH_BINARY="./target/release/kiro-rs-${ARCH_SUFFIX}"
+    cp -f "./target/release/kiro-rs" "$ARCH_BINARY"
+    ln -sf "kiro-rs-${ARCH_SUFFIX}" "./target/release/kiro-rs"
+    echo -e "${GREEN}✓ 架构产物: kiro-rs-${ARCH_SUFFIX}${NC}"
 fi
 
 # 杀掉已有的 kiro-rs 进程
