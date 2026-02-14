@@ -458,6 +458,28 @@ impl KiroProvider {
         // 尝试从请求体中提取模型信息
         let model = Self::extract_model_from_request(request_body);
 
+        // Free 账号 Opus 降级：所有可用凭据均不支持 Opus 时，自动降级为 Sonnet
+        let (request_body, model) = if model
+            .as_ref()
+            .map(|m| m.to_lowercase().contains("opus"))
+            .unwrap_or(false)
+            && !self.token_manager.has_opus_capable_credential()
+        {
+            let sonnet_model = "claude-sonnet-4-5-20250514";
+            tracing::warn!(
+                "所有可用凭据均为 Free 账号，不支持 Opus 模型，自动降级为 {}",
+                sonnet_model
+            );
+            let downgraded_body = request_body.replace(
+                model.as_ref().unwrap().as_str(),
+                sonnet_model,
+            );
+            (std::borrow::Cow::Owned(downgraded_body), Some(sonnet_model.to_string()))
+        } else {
+            (std::borrow::Cow::Borrowed(request_body), model)
+        };
+        let request_body: &str = &request_body;
+
         for attempt in 0..max_retries {
             // 获取调用上下文（绑定 index、credentials、token）
             let ctx = match self.token_manager.acquire_context(model.as_deref()).await {

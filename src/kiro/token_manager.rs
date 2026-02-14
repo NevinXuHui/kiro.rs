@@ -619,6 +619,14 @@ impl MultiTokenManager {
         self.entries.lock().iter().filter(|e| !e.disabled).count()
     }
 
+    /// 检查是否存在支持 Opus 模型的可用凭据
+    pub fn has_opus_capable_credential(&self) -> bool {
+        self.entries
+            .lock()
+            .iter()
+            .any(|e| !e.disabled && e.credentials.supports_opus())
+    }
+
     /// 根据负载均衡模式选择下一个凭据
     ///
     /// - priority 模式：选择优先级最高（priority 最小）的可用凭据
