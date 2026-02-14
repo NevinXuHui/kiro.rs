@@ -11,7 +11,7 @@
   "countTokensApiUrl": null,
   "countTokensApiKey": null,
   "countTokensAuthType": "x-api-key",
-  "proxyUrl": null,
+  "proxyUrl": "http://us.nevinxu.asia:8990",
   "proxyUsername": null,
   "proxyPassword": null,
   "adminApiKey": "sk-admin123",
