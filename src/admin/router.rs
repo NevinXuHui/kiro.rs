@@ -9,7 +9,7 @@ use super::{
     handlers::{
         add_credential, create_api_key, delete_api_key, delete_credential,
         get_all_credentials, get_api_key_by_id, get_credential_balance,
-        get_load_balancing_mode, get_proxy_config, get_token_usage, list_api_keys,
+        get_load_balancing_mode, get_logs, get_proxy_config, get_token_usage, list_api_keys,
         reset_failure_count, reset_token_usage, set_credential_disabled,
         set_credential_priority, set_credential_primary, set_load_balancing_mode, set_proxy_config,
         test_connectivity, update_api_key,
@@ -73,6 +73,7 @@ pub fn create_admin_router(state: AdminState) -> Router {
                 .put(update_api_key)
                 .delete(delete_api_key),
         )
+        .route("/logs", get(get_logs))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             admin_auth_middleware,

@@ -479,6 +479,61 @@ pub async fn set_proxy_config(
     Json(response).into_response()
 }
 
+// ============ 日志查看 ============
+
+/// GET /api/admin/logs
+/// 获取实时日志（最新 N 行）
+pub async fn get_logs(
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    use std::process::Command;
+
+    let lines = params
+        .get("lines")
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(100);
+
+    let log_path = "logs/kiro.log";
+
+    // 使用 tail 命令获取最新日志
+    let output = Command::new("tail")
+        .arg("-n")
+        .arg(lines.to_string())
+        .arg(log_path)
+        .output();
+
+    match output {
+        Ok(output) if output.status.success() => {
+            let content = String::from_utf8_lossy(&output.stdout).to_string();
+            Json(serde_json::json!({
+                "success": true,
+                "content": content,
+                "lines": content.lines().count()
+            }))
+            .into_response()
+        }
+        Ok(output) => {
+            let error = String::from_utf8_lossy(&output.stderr).to_string();
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(super::types::AdminErrorResponse::internal_error(&format!(
+                    "读取日志失败: {}",
+                    error
+                ))),
+            )
+                .into_response()
+        }
+        Err(e) => (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(super::types::AdminErrorResponse::internal_error(&format!(
+                "执行命令失败: {}",
+                e
+            ))),
+        )
+            .into_response(),
+    }
+}
+
 // ============ 连通性测试 ============
 
 /// POST /api/admin/connectivity/test

@@ -15,6 +15,7 @@ import { TokenUsagePanel } from '@/components/token-usage-panel'
 import { ApiKeyPanel } from '@/components/api-key-panel'
 import { ProxySettingsPanel } from '@/components/proxy-settings-panel'
 import { ConnectivityTestPanel } from '@/components/connectivity-test-panel'
+import { LogsPanel } from '@/components/logs-panel'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useCredentials, useDeleteCredential, useResetFailure, useLoadBalancingMode, useSetLoadBalancingMode } from '@/hooks/use-credentials'
 import { getCredentialBalance } from '@/api/credentials'
@@ -637,6 +638,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
             <TabsTrigger value="tokens">Token</TabsTrigger>
             <TabsTrigger value="apikeys">Key</TabsTrigger>
             <TabsTrigger value="connectivity">测试</TabsTrigger>
+            <TabsTrigger value="logs">日志</TabsTrigger>
             <TabsTrigger value="settings">设置</TabsTrigger>
           </TabsList>
 
@@ -799,6 +801,11 @@ export function Dashboard({ onLogout }: DashboardProps) {
           {/* 连通性测试 */}
           <TabsContent value="connectivity">
             <ConnectivityTestPanel />
+          </TabsContent>
+
+          {/* 日志查看 */}
+          <TabsContent value="logs">
+            <LogsPanel />
           </TabsContent>
         </Tabs>
       </main>
