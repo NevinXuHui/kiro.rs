@@ -28,6 +28,7 @@ export function LogsPanel() {
   const [loading, setLoading] = useState(false)
   const [autoRefresh, setAutoRefresh] = useState(false)
   const [lines, setLines] = useState(200)
+  const [refreshInterval, setRefreshInterval] = useState(3000)
   const logsEndRef = useRef<HTMLDivElement>(null)
   const intervalRef = useRef<number | null>(null)
 
@@ -81,7 +82,7 @@ export function LogsPanel() {
     if (autoRefresh) {
       intervalRef.current = window.setInterval(() => {
         fetchLogs()
-      }, 3000) // 每3秒刷新一次
+      }, refreshInterval)
     } else {
       if (intervalRef.current) {
         clearInterval(intervalRef.current)
@@ -94,7 +95,7 @@ export function LogsPanel() {
         clearInterval(intervalRef.current)
       }
     }
-  }, [autoRefresh, lines])
+  }, [autoRefresh, lines, refreshInterval])
 
   return (
     <div className="space-y-4">
@@ -112,6 +113,18 @@ export function LogsPanel() {
                 <option value={200}>200 行</option>
                 <option value={500}>500 行</option>
                 <option value={1000}>1000 行</option>
+              </select>
+              <select
+                value={refreshInterval}
+                onChange={(e) => setRefreshInterval(Number(e.target.value))}
+                className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
+                disabled={!autoRefresh}
+              >
+                <option value={1000}>1秒</option>
+                <option value={2000}>2秒</option>
+                <option value={3000}>3秒</option>
+                <option value={5000}>5秒</option>
+                <option value={10000}>10秒</option>
               </select>
               <Button
                 variant={autoRefresh ? 'default' : 'outline'}
