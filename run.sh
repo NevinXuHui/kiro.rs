@@ -238,17 +238,27 @@ if [ "$BUILD_RELEASE" = true ] && [ "$SKIP_BUILD" = false ]; then
     echo -e "${GREEN}✓ 架构产物: kiro-rs-${ARCH_SUFFIX}${NC}"
 fi
 
-# 杀掉已有的 kiro-rs 进程
-if pgrep -x kiro-rs > /dev/null 2>&1; then
+# 杀掉已有的 kiro-rs 进程（包括带架构后缀的）
+if pgrep -f 'kiro-rs' > /dev/null 2>&1; then
     echo -e "${YELLOW}==> 检测到已运行的 kiro-rs 进程，正在终止...${NC}"
-    pkill -x kiro-rs
+    pkill -f 'kiro-rs'
     sleep 1
     # 如果还没退出，强制杀掉
-    if pgrep -x kiro-rs > /dev/null 2>&1; then
-        pkill -9 -x kiro-rs
+    if pgrep -f 'kiro-rs' > /dev/null 2>&1; then
+        pkill -9 -f 'kiro-rs'
         sleep 0.5
     fi
     echo -e "${GREEN}✓ 旧进程已终止${NC}"
+
+    # 等待端口释放（最多等待 5 秒）
+    PORT=$(grep -oP '"port":\s*\K\d+' "$CONFIG_FILE" 2>/dev/null || echo "8990")
+    for i in {1..10}; do
+        if ! ss -tuln | grep -q ":$PORT "; then
+            break
+        fi
+        echo -e "${YELLOW}等待端口 $PORT 释放...${NC}"
+        sleep 0.5
+    done
 fi
 
 # 运行服务
