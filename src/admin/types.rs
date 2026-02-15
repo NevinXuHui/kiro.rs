@@ -204,6 +204,9 @@ impl SuccessResponse {
 pub struct ConnectivityTestRequest {
     /// 测试模式（"anthropic" 或 "openai"）
     pub mode: String,
+    /// 可选的模型名称（不指定则使用默认模型）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
 }
 
 /// 连通性测试响应

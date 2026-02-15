@@ -171,6 +171,7 @@ export interface UpdateProxyConfigRequest {
 // 连通性测试请求
 export interface ConnectivityTestRequest {
   mode: 'anthropic' | 'openai'
+  model?: string
 }
 
 // 连通性测试响应

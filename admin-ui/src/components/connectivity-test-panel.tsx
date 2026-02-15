@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useTestConnectivity } from '@/hooks/use-credentials'
+import { SUPPORTED_MODELS } from '@/constants/models'
 import type { ConnectivityTestResponse } from '@/types/api'
 
 type StepStatus = 'pending' | 'running' | 'done' | 'error'
@@ -16,8 +17,13 @@ interface TestState {
 }
 
 const STEP_LABELS = ['初始化测试参数', '连接上游服务', '等待模型响应', '解析返回结果']
+const MODEL_STORAGE_KEY = 'kiro-test-model'
 
 const initialState: TestState = { status: 'idle', result: null, steps: [] }
+
+function getStoredModel(): string {
+  return localStorage.getItem(MODEL_STORAGE_KEY) || 'claude-sonnet-4-5-20250929'
+}
 
 function makeSteps(active: number): ProgressStep[] {
   return STEP_LABELS.map((label, i) => ({
@@ -36,6 +42,8 @@ function finalizeSteps(errorAt?: number): ProgressStep[] {
 export function ConnectivityTestPanel() {
   const [anthropicState, setAnthropicState] = useState<TestState>(initialState)
   const [openaiState, setOpenaiState] = useState<TestState>(initialState)
+  const [anthropicModel, setAnthropicModel] = useState<string>(getStoredModel)
+  const [openaiModel, setOpenaiModel] = useState<string>(getStoredModel)
   const testMutation = useTestConnectivity()
   const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>[]>>({ anthropic: [], openai: [] })
 
@@ -44,8 +52,18 @@ export function ConnectivityTestPanel() {
     timersRef.current[mode] = []
   }, [])
 
+  const handleModelChange = useCallback((mode: 'anthropic' | 'openai', model: string) => {
+    if (mode === 'anthropic') {
+      setAnthropicModel(model)
+    } else {
+      setOpenaiModel(model)
+    }
+    localStorage.setItem(MODEL_STORAGE_KEY, model)
+  }, [])
+
   const runTest = useCallback((mode: 'anthropic' | 'openai') => {
     const setState = mode === 'anthropic' ? setAnthropicState : setOpenaiState
+    const model = mode === 'anthropic' ? anthropicModel : openaiModel
     clearTimers(mode)
 
     setState({ status: 'testing', result: null, steps: makeSteps(0) })
@@ -55,7 +73,7 @@ export function ConnectivityTestPanel() {
       setTimeout(() => setState(prev => ({ ...prev, steps: makeSteps(2) })), 1000),
     )
 
-    testMutation.mutate({ mode }, {
+    testMutation.mutate({ mode, model }, {
       onSuccess: (data) => {
         clearTimers(mode)
         setState(prev => ({ ...prev, steps: makeSteps(3) }))
@@ -81,7 +99,7 @@ export function ConnectivityTestPanel() {
         })
       },
     })
-  }, [testMutation, clearTimers])
+  }, [testMutation, clearTimers, anthropicModel, openaiModel])
 
   return (
     <div className="space-y-3 sm:space-y-4">
@@ -98,6 +116,8 @@ export function ConnectivityTestPanel() {
           endpoint="/v1/messages"
           description="测试 Anthropic 兼容接口的上游连通性"
           state={anthropicState}
+          model={anthropicModel}
+          onModelChange={(m) => handleModelChange('anthropic', m)}
           onTest={() => runTest('anthropic')}
         />
 
@@ -106,6 +126,8 @@ export function ConnectivityTestPanel() {
           endpoint="/v1/chat/completions"
           description="测试 OpenAI 兼容接口的上游连通性"
           state={openaiState}
+          model={openaiModel}
+          onModelChange={(m) => handleModelChange('openai', m)}
           onTest={() => runTest('openai')}
         />
       </div>
@@ -118,12 +140,16 @@ function TestCard({
   endpoint,
   description,
   state,
+  model,
+  onModelChange,
   onTest,
 }: {
   title: string
   endpoint: string
   description: string
   state: TestState
+  model: string
+  onModelChange: (model: string) => void
   onTest: () => void
 }) {
   const isTesting = state.status === 'testing'
@@ -139,6 +165,23 @@ function TestCard({
         <p className="text-xs text-muted-foreground">{description}</p>
       </CardHeader>
       <CardContent className="px-3 sm:px-6 space-y-3">
+        {/* 模型选择器 */}
+        <div className="space-y-1.5">
+          <label className="text-xs text-muted-foreground">测试模型</label>
+          <select
+            value={model}
+            onChange={(e) => onModelChange(e.target.value)}
+            disabled={isTesting}
+            className="w-full h-8 text-xs border rounded px-2 bg-background disabled:opacity-50"
+          >
+            {SUPPORTED_MODELS.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <Button
           onClick={onTest}
           disabled={isTesting}

@@ -488,7 +488,7 @@ pub async fn test_connectivity(
     Json(payload): Json<ConnectivityTestRequest>,
 ) -> impl IntoResponse {
     match payload.mode.as_str() {
-        "anthropic" => test_anthropic_connectivity(&state).await.into_response(),
+        "anthropic" => test_anthropic_connectivity(&state, payload.model).await.into_response(),
         "openai" => {
             Json(ConnectivityTestResponse {
                 success: false,
@@ -514,7 +514,7 @@ pub async fn test_connectivity(
 }
 
 /// Anthropic 模式连通性测试
-async fn test_anthropic_connectivity(state: &AdminState) -> Json<ConnectivityTestResponse> {
+async fn test_anthropic_connectivity(state: &AdminState, model: Option<String>) -> Json<ConnectivityTestResponse> {
     let Some(provider) = &state.kiro_provider else {
         return Json(ConnectivityTestResponse {
             success: false,
@@ -529,7 +529,7 @@ async fn test_anthropic_connectivity(state: &AdminState) -> Json<ConnectivityTes
         });
     };
 
-    let test_model = "claude-sonnet-4-20250514";
+    let test_model = model.as_deref().unwrap_or("claude-sonnet-4-20250514");
 
     // 构建最小 MessagesRequest
     let messages_request = crate::anthropic::types::MessagesRequest {
