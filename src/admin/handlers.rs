@@ -493,6 +493,8 @@ pub async fn get_logs(
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or(100);
 
+    let level = params.get("level").map(|s| s.as_str()).unwrap_or("all");
+
     let log_path = "logs/kiro.log";
 
     // 使用 tail 命令获取最新日志
@@ -509,10 +511,13 @@ pub async fn get_logs(
             // 将 UTC 时间转换为本地时间（CST +8）
             let local_content = convert_utc_to_local(&content);
 
+            // 根据日志级别过滤
+            let filtered_content = filter_by_level(&local_content, level);
+
             Json(serde_json::json!({
                 "success": true,
-                "content": local_content,
-                "lines": local_content.lines().count()
+                "content": filtered_content,
+                "lines": filtered_content.lines().count()
             }))
             .into_response()
         }
@@ -536,6 +541,31 @@ pub async fn get_logs(
         )
             .into_response(),
     }
+}
+
+/// 根据日志级别过滤
+fn filter_by_level(content: &str, level: &str) -> String {
+    if level == "all" {
+        return content.to_string();
+    }
+
+    let mut result = String::new();
+    for line in content.lines() {
+        let should_include = match level {
+            "error" => line.contains("ERROR"),
+            "warn" => line.contains("ERROR") || line.contains("WARN"),
+            "info" => line.contains("ERROR") || line.contains("WARN") || line.contains("INFO"),
+            "debug" => true, // debug 包含所有级别
+            _ => true,
+        };
+
+        if should_include {
+            result.push_str(line);
+            result.push('\n');
+        }
+    }
+
+    result
 }
 
 /// 将日志中的 UTC 时间转换为本地时间（CST +8）

@@ -29,13 +29,14 @@ export function LogsPanel() {
   const [autoRefresh, setAutoRefresh] = useState(false)
   const [lines, setLines] = useState(200)
   const [refreshInterval, setRefreshInterval] = useState(3000)
+  const [logLevel, setLogLevel] = useState('all')
   const logsEndRef = useRef<HTMLDivElement>(null)
   const intervalRef = useRef<number | null>(null)
 
   const fetchLogs = async () => {
     setLoading(true)
     try {
-      const response = await api.get(`/logs?lines=${lines}`)
+      const response = await api.get(`/logs?lines=${lines}&level=${logLevel}`)
       if (response.data.success) {
         setLogs(response.data.content)
         // 自动滚动到底部
@@ -76,7 +77,7 @@ export function LogsPanel() {
 
   useEffect(() => {
     fetchLogs()
-  }, [lines])
+  }, [lines, logLevel])
 
   useEffect(() => {
     if (autoRefresh) {
@@ -95,7 +96,7 @@ export function LogsPanel() {
         clearInterval(intervalRef.current)
       }
     }
-  }, [autoRefresh, lines, refreshInterval])
+  }, [autoRefresh, lines, refreshInterval, logLevel])
 
   return (
     <div className="space-y-4">
@@ -113,6 +114,17 @@ export function LogsPanel() {
                 <option value={200}>200 行</option>
                 <option value={500}>500 行</option>
                 <option value={1000}>1000 行</option>
+              </select>
+              <select
+                value={logLevel}
+                onChange={(e) => setLogLevel(e.target.value)}
+                className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
+              >
+                <option value="all">全部</option>
+                <option value="error">ERROR</option>
+                <option value="warn">WARN+</option>
+                <option value="info">INFO+</option>
+                <option value="debug">DEBUG+</option>
               </select>
               <select
                 value={refreshInterval}
