@@ -26,7 +26,8 @@
       "Bash(CC=/usr/bin/gcc CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=/usr/bin/gcc cargo check:*)",
       "Bash(kill:*)",
       "Bash(CC=/usr/bin/gcc CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=/usr/bin/gcc cargo build:*)",
-      "mcp__plugin_oh-my-claudecode_t__ast_grep_replace"
+      "mcp__plugin_oh-my-claudecode_t__ast_grep_replace",
+      "mcp__plugin_oh-my-claudecode_t__lsp_diagnostics"
     ]
   }
 }
