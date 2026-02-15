@@ -292,8 +292,8 @@ impl KiroCredentials {
                 // 如果包含 FREE，则不支持 Opus
                 !title_upper.contains("FREE")
             }
-            // 如果还没有获取订阅信息，暂时允许（首次使用时会获取）
-            None => true,
+            // 未获取订阅信息时默认视为 Free，不允许 Opus
+            None => false,
         }
     }
 }
