@@ -505,10 +505,14 @@ pub async fn get_logs(
     match output {
         Ok(output) if output.status.success() => {
             let content = String::from_utf8_lossy(&output.stdout).to_string();
+
+            // 将 UTC 时间转换为本地时间（CST +8）
+            let local_content = convert_utc_to_local(&content);
+
             Json(serde_json::json!({
                 "success": true,
-                "content": content,
-                "lines": content.lines().count()
+                "content": local_content,
+                "lines": local_content.lines().count()
             }))
             .into_response()
         }
@@ -532,6 +536,40 @@ pub async fn get_logs(
         )
             .into_response(),
     }
+}
+
+/// 将日志中的 UTC 时间转换为本地时间（CST +8）
+fn convert_utc_to_local(content: &str) -> String {
+    let mut result = String::with_capacity(content.len());
+
+    for line in content.lines() {
+        // 查找时间戳格式：2026-02-15T10:40:31
+        if let Some(t_pos) = line.find('T') {
+            if t_pos > 10 && line.len() > t_pos + 8 {
+                // 提取小时部分
+                let hour_str = &line[t_pos + 1..t_pos + 3];
+                if let Ok(hour) = hour_str.parse::<i32>() {
+                    let local_hour = (hour + 8) % 24;
+                    // 替换小时并移除 Z 后缀
+                    let mut new_line = line.to_string();
+                    new_line = new_line.replacen(
+                        &format!("T{:02}:", hour),
+                        &format!("T{:02}:", local_hour),
+                        1
+                    );
+                    new_line = new_line.replace("Z\u{1b}", "+08:00\u{1b}"); // 处理带颜色代码的
+                    new_line = new_line.replace("Z ", "+08:00 ");
+                    result.push_str(&new_line);
+                    result.push('\n');
+                    continue;
+                }
+            }
+        }
+        result.push_str(line);
+        result.push('\n');
+    }
+
+    result
 }
 
 // ============ 连通性测试 ============
