@@ -43,15 +43,19 @@ detect_arch() {
 # 继承调用者的 PATH（sudo 下保留 nvm/cargo 等用户态工具路径）
 if [[ -n "$SUDO_USER" ]]; then
     USER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
-    # nvm / node / pnpm
-    NVM_DIR="$USER_HOME/.nvm"
-    if [[ -d "$NVM_DIR" ]]; then
-        NODE_DIR=$(find "$NVM_DIR/versions/node" -maxdepth 1 -type d | sort -V | tail -1)
-        [[ -d "$NODE_DIR/bin" ]] && export PATH="$NODE_DIR/bin:$PATH"
-    fi
-    # cargo / rustup
-    [[ -d "$USER_HOME/.cargo/bin" ]] && export PATH="$USER_HOME/.cargo/bin:$PATH"
+else
+    # 直接以 root 运行时，使用 root 的 HOME
+    USER_HOME="$HOME"
 fi
+
+# nvm / node / pnpm
+NVM_DIR="$USER_HOME/.nvm"
+if [[ -d "$NVM_DIR" ]]; then
+    NODE_DIR=$(find "$NVM_DIR/versions/node" -maxdepth 1 -type d | sort -V | tail -1)
+    [[ -d "$NODE_DIR/bin" ]] && export PATH="$NODE_DIR/bin:$PATH"
+fi
+# cargo / rustup
+[[ -d "$USER_HOME/.cargo/bin" ]] && export PATH="$USER_HOME/.cargo/bin:$PATH"
 
 # 检查必要文件
 [[ -f "$PROJECT_DIR/config.json" ]]      || error "缺少 config.json"

@@ -5,12 +5,12 @@ After=network.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/mine/Code/ai-tools/kiro.rs
-ExecStart=/mine/Code/ai-tools/kiro.rs/target/release/kiro-rs -c /mine/Code/ai-tools/kiro.rs/config.json --credentials /mine/Code/ai-tools/kiro.rs/credentials.json
+WorkingDirectory=/mine/Code/ai-tools/kiro-rs
+ExecStart=/mine/Code/ai-tools/kiro-rs/target/release/kiro-rs -c /mine/Code/ai-tools/kiro-rs/config.json --credentials /mine/Code/ai-tools/kiro-rs/credentials.json
 Restart=always
 RestartSec=5
-StandardOutput=append:/mine/Code/ai-tools/kiro.rs/logs/kiro.log
-StandardError=append:/mine/Code/ai-tools/kiro.rs/logs/kiro.log
+StandardOutput=append:/mine/Code/ai-tools/kiro-rs/logs/kiro.log
+StandardError=append:/mine/Code/ai-tools/kiro-rs/logs/kiro.log
 
 # 环境变量（确保 cc 指向正确的编译器，虽然运行时不需要，但保险起见）
 Environment="RUST_LOG=info"
