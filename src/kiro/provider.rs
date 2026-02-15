@@ -458,6 +458,10 @@ impl KiroProvider {
         // 尝试从请求体中提取模型信息
         let model = Self::extract_model_from_request(request_body);
 
+        // 调试日志
+        tracing::debug!("提取的模型: {:?}", model);
+        tracing::debug!("是否有 Opus 支持凭据: {}", self.token_manager.has_opus_capable_credential());
+
         // Free 账号 Opus 降级：所有可用凭据均不支持 Opus 时，自动降级为 Sonnet
         let (request_body, model) = if model
             .as_ref()
@@ -465,16 +469,41 @@ impl KiroProvider {
             .unwrap_or(false)
             && !self.token_manager.has_opus_capable_credential()
         {
-            let sonnet_model = "claude-sonnet-4-5-20250514";
+            let sonnet_model = "claude-sonnet-4.5";  // 使用映射后的格式
             tracing::warn!(
                 "所有可用凭据均为 Free 账号，不支持 Opus 模型，自动降级为 {}",
                 sonnet_model
             );
-            let downgraded_body = request_body.replace(
-                model.as_ref().unwrap().as_str(),
-                sonnet_model,
-            );
-            (std::borrow::Cow::Owned(downgraded_body), Some(sonnet_model.to_string()))
+
+            // 使用 JSON 解析和修改，而不是简单的字符串替换
+            match serde_json::from_str::<serde_json::Value>(request_body) {
+                Ok(mut json) => {
+                    // 修改 modelId 字段
+                    if let Some(conversation_state) = json.get_mut("conversationState") {
+                        if let Some(current_message) = conversation_state.get_mut("currentMessage") {
+                            if let Some(user_input_message) = current_message.get_mut("userInputMessage") {
+                                if let Some(model_id) = user_input_message.get_mut("modelId") {
+                                    *model_id = serde_json::Value::String(sonnet_model.to_string());
+                                }
+                            }
+                        }
+                    }
+
+                    match serde_json::to_string(&json) {
+                        Ok(downgraded_body) => {
+                            (std::borrow::Cow::Owned(downgraded_body), Some(sonnet_model.to_string()))
+                        }
+                        Err(e) => {
+                            tracing::error!("降级后序列化失败: {}", e);
+                            (std::borrow::Cow::Borrowed(request_body), model)
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("降级时解析 JSON 失败: {}", e);
+                    (std::borrow::Cow::Borrowed(request_body), model)
+                }
+            }
         } else {
             (std::borrow::Cow::Borrowed(request_body), model)
         };
