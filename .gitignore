@@ -40,3 +40,6 @@ kiro.log
 
 # SSL 证书
 *.pem
+
+# 安装包
+*.apk
