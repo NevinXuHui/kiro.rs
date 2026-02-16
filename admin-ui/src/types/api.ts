@@ -110,6 +110,23 @@ export interface TokenUsageResponse {
   recentRequests: TokenUsageRecord[]
 }
 
+// 时间段统计数据
+export interface TimeRangeStats {
+  timeKey: string
+  inputTokens: number
+  outputTokens: number
+  requests: number
+}
+
+// 时间序列统计响应
+export interface TokenUsageTimeSeriesResponse {
+  granularity: 'hour' | 'day' | 'week'
+  data: TimeRangeStats[]
+  totalInputTokens: number
+  totalOutputTokens: number
+  totalRequests: number
+}
+
 // API Key 条目视图（脱敏）
 export interface ApiKeyEntryView {
   id: number

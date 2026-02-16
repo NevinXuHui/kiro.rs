@@ -9,6 +9,7 @@ import type {
   AddCredentialRequest,
   AddCredentialResponse,
   TokenUsageResponse,
+  TokenUsageTimeSeriesResponse,
   ApiKeyEntryView,
   CreateApiKeyRequest,
   CreateApiKeyResponse,
@@ -125,6 +126,16 @@ export async function getTokenUsage(): Promise<TokenUsageResponse> {
 // 重置 token 使用统计
 export async function resetTokenUsage(): Promise<SuccessResponse> {
   const { data } = await api.post<SuccessResponse>('/token-usage/reset')
+  return data
+}
+
+// 获取时间序列统计数据
+export async function getTokenUsageTimeseries(
+  granularity: 'hour' | 'day' | 'week'
+): Promise<TokenUsageTimeSeriesResponse> {
+  const { data } = await api.get<TokenUsageTimeSeriesResponse>(
+    `/token-usage/timeseries?granularity=${granularity}`
+  )
   return data
 }
 

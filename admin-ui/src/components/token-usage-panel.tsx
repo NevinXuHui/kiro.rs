@@ -4,8 +4,20 @@ import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { useTokenUsage, useResetTokenUsage, useApiKeys } from '@/hooks/use-credentials'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { useTokenUsage, useResetTokenUsage, useApiKeys, useTokenUsageTimeseries } from '@/hooks/use-credentials'
 import { formatNumber } from '@/lib/utils'
+import {
+  ResponsiveContainer,
+  ComposedChart,
+  Area,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+} from 'recharts'
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const
 const PAGE_SIZE_KEY = 'kiro-admin-page-size'
@@ -15,12 +27,147 @@ function getStoredPageSize(): number {
   return PAGE_SIZE_OPTIONS.includes(v as typeof PAGE_SIZE_OPTIONS[number]) ? v : 20
 }
 
+// 时间格式化函数
+function formatTimeKey(timeKey: string, granularity: 'hour' | 'day' | 'week'): string {
+  const date = new Date(timeKey)
+  if (granularity === 'hour') {
+    return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })
+  } else if (granularity === 'day') {
+    return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit' })
+  } else {
+    // 周：显示为 "02/10"
+    return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit' })
+  }
+}
+
+// 图表组件
+function TokenUsageChart({ granularity }: { granularity: 'hour' | 'day' | 'week' }) {
+  const { data, isLoading } = useTokenUsageTimeseries(granularity)
+
+  if (isLoading) {
+    return (
+      <div className="h-[250px] sm:h-[350px] flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (!data || data.data.length === 0) {
+    return (
+      <div className="h-[250px] sm:h-[350px] flex flex-col items-center justify-center text-muted-foreground">
+        <BarChart3 className="h-12 w-12 mb-2 opacity-20" />
+        <p className="text-sm">暂无统计数据</p>
+      </div>
+    )
+  }
+
+  // 转换数据格式并倒序（最旧的在左边）
+  const chartData = [...data.data].reverse().map(item => ({
+    time: formatTimeKey(item.timeKey, granularity),
+    fullTime: item.timeKey,
+    inputTokens: item.inputTokens,
+    outputTokens: item.outputTokens,
+    requests: item.requests,
+  }))
+
+  return (
+    <ResponsiveContainer width="100%" height={350}>
+      <ComposedChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+        <defs>
+          <linearGradient id="inputGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="hsl(217 91% 60%)" stopOpacity={0.3} />
+            <stop offset="95%" stopColor="hsl(217 91% 60%)" stopOpacity={0.05} />
+          </linearGradient>
+          <linearGradient id="outputGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="hsl(142 71% 45%)" stopOpacity={0.3} />
+            <stop offset="95%" stopColor="hsl(142 71% 45%)" stopOpacity={0.05} />
+          </linearGradient>
+        </defs>
+
+        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+
+        <XAxis
+          dataKey="time"
+          stroke="hsl(var(--muted-foreground))"
+          tick={{ fontSize: 11 }}
+          tickMargin={8}
+          angle={-45}
+          textAnchor="end"
+          height={60}
+        />
+
+        <YAxis
+          yAxisId="tokens"
+          stroke="hsl(var(--muted-foreground))"
+          tick={{ fontSize: 11 }}
+          tickFormatter={(value) => formatNumber(value)}
+        />
+
+        <YAxis
+          yAxisId="requests"
+          orientation="right"
+          stroke="hsl(262 83% 58%)"
+          tick={{ fontSize: 11 }}
+        />
+
+        <Tooltip
+          contentStyle={{
+            backgroundColor: 'hsl(var(--card))',
+            border: '1px solid hsl(var(--border))',
+            borderRadius: '0.5rem',
+            fontSize: '12px',
+          }}
+          formatter={(value: number, name: string) => {
+            if (name === '输入 Tokens' || name === '输出 Tokens') {
+              return formatNumber(value)
+            }
+            return value
+          }}
+        />
+
+        <Legend wrapperStyle={{ fontSize: '12px' }} iconType="line" />
+
+        <Area
+          yAxisId="tokens"
+          type="monotone"
+          dataKey="inputTokens"
+          name="输入 Tokens"
+          stroke="hsl(217 91% 60%)"
+          fill="url(#inputGradient)"
+          strokeWidth={2}
+        />
+
+        <Area
+          yAxisId="tokens"
+          type="monotone"
+          dataKey="outputTokens"
+          name="输出 Tokens"
+          stroke="hsl(142 71% 45%)"
+          fill="url(#outputGradient)"
+          strokeWidth={2}
+        />
+
+        <Line
+          yAxisId="requests"
+          type="monotone"
+          dataKey="requests"
+          name="请求次数"
+          stroke="hsl(262 83% 58%)"
+          strokeWidth={2}
+          dot={{ r: 3 }}
+        />
+      </ComposedChart>
+    </ResponsiveContainer>
+  )
+}
+
 export function TokenUsagePanel() {
   const { data, isLoading, error, refetch, isFetching } = useTokenUsage()
   const { data: apiKeys } = useApiKeys()
   const resetMutation = useResetTokenUsage()
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(getStoredPageSize)
+  const [timeDimension, setTimeDimension] = useState<'hour' | 'day' | 'week'>('day')
 
   // 创建 API Key ID 到标签的映射
   const apiKeyMap = new Map(apiKeys?.map(key => [key.id, key.label]) || [])
@@ -148,6 +295,31 @@ export function TokenUsagePanel() {
           </CardContent>
         </Card>
       </div>
+
+      {/* 使用趋势图表 */}
+      <Card>
+        <CardHeader className="pb-2 sm:pb-3 px-3 sm:px-6">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-xs sm:text-sm font-medium">使用趋势</CardTitle>
+            <Tabs value={timeDimension} onValueChange={(v) => setTimeDimension(v as 'hour' | 'day' | 'week')}>
+              <TabsList className="h-8 sm:h-9 w-auto">
+                <TabsTrigger value="hour" className="text-xs sm:text-sm px-3 sm:px-4">
+                  按小时
+                </TabsTrigger>
+                <TabsTrigger value="day" className="text-xs sm:text-sm px-3 sm:px-4">
+                  按天
+                </TabsTrigger>
+                <TabsTrigger value="week" className="text-xs sm:text-sm px-3 sm:px-4">
+                  按周
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+        </CardHeader>
+        <CardContent className="px-3 sm:px-6">
+          <TokenUsageChart granularity={timeDimension} />
+        </CardContent>
+      </Card>
 
       {/* 按模型分组 + 按凭据分组 */}
       <div className="grid gap-2 sm:gap-4 md:grid-cols-2">

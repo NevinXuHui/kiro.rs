@@ -11,6 +11,7 @@ import {
   getLoadBalancingMode,
   setLoadBalancingMode,
   getTokenUsage,
+  getTokenUsageTimeseries,
   resetTokenUsage,
   getApiKeys,
   createApiKey,
@@ -168,7 +169,17 @@ export function useResetTokenUsage() {
     mutationFn: resetTokenUsage,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tokenUsage'] })
+      queryClient.invalidateQueries({ queryKey: ['tokenUsageTimeseries'] })
     },
+  })
+}
+
+// 查询时间序列统计数据
+export function useTokenUsageTimeseries(granularity: 'hour' | 'day' | 'week') {
+  return useQuery({
+    queryKey: ['tokenUsageTimeseries', granularity],
+    queryFn: () => getTokenUsageTimeseries(granularity),
+    refetchInterval: 30000, // 每 30 秒刷新一次
   })
 }
 
