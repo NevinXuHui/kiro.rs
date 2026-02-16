@@ -21,6 +21,9 @@ const SAVE_DEBOUNCE_SECS: u64 = 30;
 /// 持久化文件名
 const USAGE_FILE_NAME: &str = "kiro_token_usage.json";
 
+/// 最大保留的历史记录数量
+const MAX_RECENT_REQUESTS: usize = 10000;
+
 // ============ 持久化数据结构 ============
 
 /// 单条请求的 token 使用记录
@@ -80,6 +83,63 @@ pub struct TokenUsageResponse {
     pub by_model: HashMap<String, GroupTokenStats>,
     pub by_api_key: HashMap<String, GroupTokenStats>,
     pub recent_requests: Vec<TokenUsageRecord>,
+}
+
+/// 时间维度枚举
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TimeGranularity {
+    Hour,
+    Day,
+    Week,
+}
+
+impl TimeGranularity {
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "hour" => Some(Self::Hour),
+            "day" => Some(Self::Day),
+            "week" => Some(Self::Week),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Hour => "hour",
+            Self::Day => "day",
+            Self::Week => "week",
+        }
+    }
+}
+
+/// 时间段统计数据
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimeRangeStats {
+    /// 时间标识（ISO 8601 格式）
+    pub time_key: String,
+    /// 输入 tokens
+    pub input_tokens: i64,
+    /// 输出 tokens
+    pub output_tokens: i64,
+    /// 请求次数
+    pub requests: u64,
+}
+
+/// 时间聚合响应
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TokenUsageTimeSeriesResponse {
+    /// 时间维度
+    pub granularity: String,
+    /// 时间序列数据
+    pub data: Vec<TimeRangeStats>,
+    /// 总输入 tokens
+    pub total_input_tokens: i64,
+    /// 总输出 tokens
+    pub total_output_tokens: i64,
+    /// 总请求次数
+    pub total_requests: u64,
 }
 
 // ============ Tracker 核心 ============
@@ -168,6 +228,11 @@ impl TokenUsageTracker {
 
             // 记录最近请求
             stats.recent_requests.push_back(record);
+
+            // 限制历史记录数量，超出时删除最旧的记录
+            while stats.recent_requests.len() > MAX_RECENT_REQUESTS {
+                stats.recent_requests.pop_front();
+            }
         }
         // 锁已释放，尝试 debounced 持久化
         self.save_debounced();
@@ -228,6 +293,83 @@ impl TokenUsageTracker {
             by_model,
             by_api_key: HashMap::new(),
             recent_requests: recent,
+        }
+    }
+
+    /// 获取时间序列统计数据
+    pub fn get_timeseries_stats(&self, granularity: TimeGranularity) -> TokenUsageTimeSeriesResponse {
+        use chrono::{DateTime, Datelike, Duration, IsoWeek, Timelike};
+
+        let stats = self.stats.lock();
+        let mut aggregated: HashMap<String, TimeRangeStats> = HashMap::new();
+
+        // 遍历所有最近请求，按时间维度聚合
+        for record in stats.recent_requests.iter() {
+            // 解析时间戳
+            let dt = match DateTime::parse_from_rfc3339(&record.timestamp) {
+                Ok(dt) => dt.with_timezone(&chrono::Utc),
+                Err(_) => continue, // 跳过无效时间戳
+            };
+
+            // 根据时间维度生成 time_key
+            let time_key = match granularity {
+                TimeGranularity::Hour => {
+                    // 截断到小时边界
+                    dt.format("%Y-%m-%dT%H:00:00Z").to_string()
+                }
+                TimeGranularity::Day => {
+                    // 截断到日期边界
+                    dt.format("%Y-%m-%dT00:00:00Z").to_string()
+                }
+                TimeGranularity::Week => {
+                    // 计算周一日期作为周标识（ISO 8601）
+                    let iso_week: IsoWeek = dt.iso_week();
+                    let year = iso_week.year();
+                    let week = iso_week.week();
+
+                    // 计算该周的周一日期
+                    let days_from_monday = dt.weekday().num_days_from_monday();
+                    let monday = dt - Duration::days(days_from_monday as i64);
+                    monday.format("%Y-%m-%dT00:00:00Z").to_string()
+                }
+            };
+
+            // 聚合数据
+            let entry = aggregated.entry(time_key.clone()).or_insert_with(|| TimeRangeStats {
+                time_key,
+                input_tokens: 0,
+                output_tokens: 0,
+                requests: 0,
+            });
+
+            entry.input_tokens += record.input_tokens as i64;
+            entry.output_tokens += record.output_tokens as i64;
+            entry.requests += 1;
+        }
+
+        // 转换为 Vec 并按时间倒序排列（最新在前）
+        let mut data: Vec<TimeRangeStats> = aggregated.into_values().collect();
+        data.sort_by(|a, b| b.time_key.cmp(&a.time_key));
+
+        // 限制返回的数据点数量
+        let limit = match granularity {
+            TimeGranularity::Hour => 48,  // 最近 48 小时
+            TimeGranularity::Day => 30,   // 最近 30 天
+            TimeGranularity::Week => 12,  // 最近 12 周
+        };
+        data.truncate(limit);
+
+        // 计算总计
+        let total_input_tokens = data.iter().map(|d| d.input_tokens).sum();
+        let total_output_tokens = data.iter().map(|d| d.output_tokens).sum();
+        let total_requests = data.iter().map(|d| d.requests).sum();
+
+        TokenUsageTimeSeriesResponse {
+            granularity: granularity.as_str().to_string(),
+            data,
+            total_input_tokens,
+            total_output_tokens,
+            total_requests,
         }
     }
 

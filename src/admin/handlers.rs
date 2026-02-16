@@ -185,6 +185,44 @@ pub async fn reset_token_usage(State(state): State<AdminState>) -> impl IntoResp
     }
 }
 
+/// GET /api/admin/token-usage/timeseries?granularity=hour|day|week
+/// 获取时间序列统计数据
+pub async fn get_token_usage_timeseries(
+    State(state): State<AdminState>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    use crate::token_usage::TimeGranularity;
+
+    match &state.token_usage_tracker {
+        Some(tracker) => {
+            let granularity_str = params.get("granularity").map(|s| s.as_str()).unwrap_or("day");
+            let granularity = match TimeGranularity::from_str(granularity_str) {
+                Some(g) => g,
+                None => {
+                    return (
+                        axum::http::StatusCode::BAD_REQUEST,
+                        Json(super::types::AdminErrorResponse::new(
+                            "invalid_parameter",
+                            "granularity must be one of: hour, day, week",
+                        )),
+                    )
+                        .into_response()
+                }
+            };
+
+            Json(tracker.get_timeseries_stats(granularity)).into_response()
+        }
+        None => (
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            Json(super::types::AdminErrorResponse::new(
+                "service_unavailable",
+                "Token usage tracking is not enabled",
+            )),
+        )
+            .into_response(),
+    }
+}
+
 /// GET /api/admin/api-keys
 /// 列出所有 API Key（脱敏）
 pub async fn list_api_keys(State(state): State<AdminState>) -> impl IntoResponse {
