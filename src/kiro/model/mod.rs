@@ -7,7 +7,9 @@
 //! - `credentials`: OAuth 凭证
 //! - `token_refresh`: Token 刷新
 //! - `usage_limits`: 使用额度查询
+//! - `account`: 账户信息
 
+pub mod account;
 pub mod common;
 pub mod credentials;
 pub mod events;

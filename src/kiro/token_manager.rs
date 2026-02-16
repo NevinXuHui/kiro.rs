@@ -327,6 +327,67 @@ pub(crate) async fn get_usage_limits(
     Ok(data)
 }
 
+/// 获取账户信息（包含邮箱）
+pub(crate) async fn get_account_info(
+    credentials: &KiroCredentials,
+    config: &Config,
+    token: &str,
+    proxy: Option<&ProxyConfig>,
+) -> anyhow::Result<crate::kiro::model::account::AccountResponse> {
+    tracing::debug!("正在获取账户信息...");
+
+    // 优先级：凭据.api_region > config.api_region > config.region
+    let region = credentials.effective_api_region(config);
+    let host = format!("q.{}.amazonaws.com", region);
+    let machine_id = machine_id::generate_from_credentials(credentials, config)
+        .ok_or_else(|| anyhow::anyhow!("无法生成 machineId"))?;
+    let kiro_version = &config.kiro_version;
+
+    // 构建 URL
+    let url = format!("https://{}/getAccount", host);
+
+    // 构建 User-Agent headers
+    let user_agent = format!(
+        "aws-sdk-js/1.0.0 ua/2.1 os/darwin#24.6.0 lang/js md/nodejs#22.21.1 \
+         api/codewhispererruntime#1.0.0 m/N,E KiroIDE-{}-{}",
+        kiro_version, machine_id
+    );
+    let amz_user_agent = format!(
+        "{} KiroIDE-{}-{}",
+        USAGE_LIMITS_AMZ_USER_AGENT_PREFIX, kiro_version, machine_id
+    );
+
+    let client = build_client(proxy, 60, config.tls_backend)?;
+
+    let response = client
+        .get(&url)
+        .header("x-amz-user-agent", &amz_user_agent)
+        .header("User-Agent", &user_agent)
+        .header("host", &host)
+        .header("amz-sdk-invocation-id", uuid::Uuid::new_v4().to_string())
+        .header("amz-sdk-request", "attempt=1; max=1")
+        .header("Authorization", format!("Bearer {}", token))
+        .header("Connection", "close")
+        .send()
+        .await?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let body_text = response.text().await.unwrap_or_default();
+        let error_msg = match status.as_u16() {
+            401 => "认证失败，Token 无效或已过期",
+            403 => "权限不足，无法获取账户信息",
+            429 => "请求过于频繁，已被限流",
+            500..=599 => "服务器错误，AWS 服务暂时不可用",
+            _ => "获取账户信息失败",
+        };
+        bail!("{}: {} {}", error_msg, status, body_text);
+    }
+
+    let data: crate::kiro::model::account::AccountResponse = response.json().await?;
+    Ok(data)
+}
+
 // ============================================================================
 // 多凭据 Token 管理器
 // ============================================================================
