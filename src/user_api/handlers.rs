@@ -172,7 +172,7 @@ async fn test_anthropic(state: &UserApiState) -> Json<ConnectivityTestResponse> 
     };
 
     let response = match result {
-        Ok(Ok(resp)) => resp,
+        Ok(Ok(api_resp)) => api_resp.response,
         Ok(Err(e)) => return make_error(format!("API 调用失败: {}", e)),
         Err(_) => return make_error("连接超时（30 秒）".to_string()),
     };

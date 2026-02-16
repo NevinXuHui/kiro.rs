@@ -26,6 +26,14 @@ const MAX_RETRIES_PER_CREDENTIAL: usize = 3;
 /// 总重试次数硬上限（避免无限重试）
 const MAX_TOTAL_RETRIES: usize = 9;
 
+/// API 响应结果，包含实际使用的模型名称
+pub struct ApiResponse {
+    /// HTTP 响应
+    pub response: reqwest::Response,
+    /// 实际使用的模型名称（可能因降级而与请求不同）
+    pub actual_model: Option<String>,
+}
+
 /// Kiro API Provider
 ///
 /// 核心组件，负责与 Kiro API 通信
@@ -285,7 +293,7 @@ impl KiroProvider {
     ///
     /// # Returns
     /// 返回原始的 HTTP Response，不做解析
-    pub async fn call_api(&self, request_body: &str) -> anyhow::Result<reqwest::Response> {
+    pub async fn call_api(&self, request_body: &str) -> anyhow::Result<ApiResponse> {
         self.call_api_with_retry(request_body, false).await
     }
 
@@ -302,7 +310,7 @@ impl KiroProvider {
     ///
     /// # Returns
     /// 返回原始的 HTTP Response，调用方负责处理流式数据
-    pub async fn call_api_stream(&self, request_body: &str) -> anyhow::Result<reqwest::Response> {
+    pub async fn call_api_stream(&self, request_body: &str) -> anyhow::Result<ApiResponse> {
         self.call_api_with_retry(request_body, true).await
     }
 
@@ -449,7 +457,7 @@ impl KiroProvider {
         &self,
         request_body: &str,
         is_stream: bool,
-    ) -> anyhow::Result<reqwest::Response> {
+    ) -> anyhow::Result<ApiResponse> {
         let total_credentials = self.token_manager.total_count();
         let max_retries = (total_credentials * MAX_RETRIES_PER_CREDENTIAL).min(MAX_TOTAL_RETRIES);
         let mut last_error: Option<anyhow::Error> = None;
@@ -560,7 +568,10 @@ impl KiroProvider {
             // 成功响应
             if status.is_success() {
                 self.token_manager.report_success(ctx.id);
-                return Ok(response);
+                return Ok(ApiResponse {
+                    response,
+                    actual_model: model.clone(),
+                });
             }
 
             // 失败响应：读取 body 用于日志/错误信息

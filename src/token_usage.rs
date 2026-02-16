@@ -298,7 +298,7 @@ impl TokenUsageTracker {
 
     /// 获取时间序列统计数据
     pub fn get_timeseries_stats(&self, granularity: TimeGranularity) -> TokenUsageTimeSeriesResponse {
-        use chrono::{DateTime, Datelike, Duration, IsoWeek, Timelike};
+        use chrono::{DateTime, Datelike, Duration, IsoWeek};
 
         let stats = self.stats.lock();
         let mut aggregated: HashMap<String, TimeRangeStats> = HashMap::new();
@@ -324,8 +324,6 @@ impl TokenUsageTracker {
                 TimeGranularity::Week => {
                     // 计算周一日期作为周标识（ISO 8601）
                     let iso_week: IsoWeek = dt.iso_week();
-                    let year = iso_week.year();
-                    let week = iso_week.week();
 
                     // 计算该周的周一日期
                     let days_from_monday = dt.weekday().num_days_from_monday();

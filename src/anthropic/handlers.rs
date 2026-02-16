@@ -290,7 +290,7 @@ async fn handle_stream_request(
     api_key_id: Option<u64>,
 ) -> Response {
     // 调用 Kiro API（支持多凭据故障转移）
-    let response = match provider.call_api_stream(request_body).await {
+    let api_response = match provider.call_api_stream(request_body).await {
         Ok(resp) => resp,
         Err(e) => {
             tracing::error!("Kiro API 调用失败: {}", e);
@@ -305,6 +305,9 @@ async fn handle_stream_request(
         }
     };
 
+    // 获取实际使用的模型（可能因降级而不同）
+    let actual_model = api_response.actual_model.as_deref().unwrap_or(model);
+
     // 获取当前使用的凭据 ID（用于 token 统计）
     let credential_id = provider.current_credential_id();
 
@@ -314,8 +317,8 @@ async fn handle_stream_request(
     // 生成初始事件
     let initial_events = ctx.generate_initial_events();
 
-    // 创建 SSE 流
-    let stream = create_sse_stream(response, ctx, initial_events, token_usage_tracker, model.to_string(), credential_id, api_key_id);
+    // 创建 SSE 流（使用实际模型名称进行统计）
+    let stream = create_sse_stream(api_response.response, ctx, initial_events, token_usage_tracker, actual_model.to_string(), credential_id, api_key_id);
 
     // 返回 SSE 响应
     Response::builder()
@@ -458,7 +461,7 @@ async fn handle_non_stream_request(
     api_key_id: Option<u64>,
 ) -> Response {
     // 调用 Kiro API（支持多凭据故障转移）
-    let response = match provider.call_api(request_body).await {
+    let api_response = match provider.call_api(request_body).await {
         Ok(resp) => resp,
         Err(e) => {
             tracing::error!("Kiro API 调用失败: {}", e);
@@ -473,8 +476,11 @@ async fn handle_non_stream_request(
         }
     };
 
+    // 获取实际使用的模型（可能因降级而不同）
+    let actual_model = api_response.actual_model.as_deref().unwrap_or(model);
+
     // 读取响应体
-    let body_bytes = match response.bytes().await {
+    let body_bytes = match api_response.response.bytes().await {
         Ok(bytes) => bytes,
         Err(e) => {
             tracing::error!("读取响应体失败: {}", e);
@@ -598,10 +604,10 @@ async fn handle_non_stream_request(
     // 使用从 contextUsageEvent 计算的 input_tokens，如果没有则使用估算值
     let final_input_tokens = context_input_tokens.unwrap_or(input_tokens);
 
-    // 记录 token 使用量
+    // 记录 token 使用量（使用实际模型名称）
     if let Some(ref tracker) = token_usage_tracker {
         tracker.record(
-            model.to_string(),
+            actual_model.to_string(),
             provider.current_credential_id(),
             final_input_tokens,
             output_tokens,
@@ -868,7 +874,7 @@ async fn handle_stream_request_buffered(
     api_key_id: Option<u64>,
 ) -> Response {
     // 调用 Kiro API（支持多凭据故障转移）
-    let response = match provider.call_api_stream(request_body).await {
+    let api_response = match provider.call_api_stream(request_body).await {
         Ok(resp) => resp,
         Err(e) => {
             tracing::error!("Kiro API 调用失败: {}", e);
@@ -883,14 +889,17 @@ async fn handle_stream_request_buffered(
         }
     };
 
+    // 获取实际使用的模型（可能因降级而不同）
+    let actual_model = api_response.actual_model.as_deref().unwrap_or(model);
+
     // 获取当前使用的凭据 ID（用于 token 统计）
     let credential_id = provider.current_credential_id();
 
     // 创建缓冲流处理上下文
     let ctx = BufferedStreamContext::new(model, estimated_input_tokens, thinking_enabled);
 
-    // 创建缓冲 SSE 流
-    let stream = create_buffered_sse_stream(response, ctx, token_usage_tracker, model.to_string(), credential_id, api_key_id);
+    // 创建缓冲 SSE 流（使用实际模型名称进行统计）
+    let stream = create_buffered_sse_stream(api_response.response, ctx, token_usage_tracker, actual_model.to_string(), credential_id, api_key_id);
 
     // 返回 SSE 响应
     Response::builder()

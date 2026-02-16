@@ -71,93 +71,133 @@ function TokenUsageChart({ granularity }: { granularity: 'hour' | 'day' | 'week'
   }))
 
   return (
-    <ResponsiveContainer width="100%" height={350}>
-      <ComposedChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-        <defs>
-          <linearGradient id="inputGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="hsl(217 91% 60%)" stopOpacity={0.3} />
-            <stop offset="95%" stopColor="hsl(217 91% 60%)" stopOpacity={0.05} />
-          </linearGradient>
-          <linearGradient id="outputGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="hsl(142 71% 45%)" stopOpacity={0.3} />
-            <stop offset="95%" stopColor="hsl(142 71% 45%)" stopOpacity={0.05} />
-          </linearGradient>
-        </defs>
+    <div className="space-y-4">
+      <ResponsiveContainer width="100%" height={350}>
+        <ComposedChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+          <defs>
+            <linearGradient id="inputGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="hsl(217 91% 60%)" stopOpacity={0.3} />
+              <stop offset="95%" stopColor="hsl(217 91% 60%)" stopOpacity={0.05} />
+            </linearGradient>
+            <linearGradient id="outputGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="hsl(142 71% 45%)" stopOpacity={0.3} />
+              <stop offset="95%" stopColor="hsl(142 71% 45%)" stopOpacity={0.05} />
+            </linearGradient>
+          </defs>
 
-        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
 
-        <XAxis
-          dataKey="time"
-          stroke="hsl(var(--muted-foreground))"
-          tick={{ fontSize: 11 }}
-          tickMargin={8}
-          angle={-45}
-          textAnchor="end"
-          height={60}
-        />
+          <XAxis
+            dataKey="time"
+            stroke="hsl(var(--muted-foreground))"
+            tick={{ fontSize: 11 }}
+            tickMargin={8}
+            angle={-45}
+            textAnchor="end"
+            height={60}
+          />
 
-        <YAxis
-          yAxisId="tokens"
-          stroke="hsl(var(--muted-foreground))"
-          tick={{ fontSize: 11 }}
-          tickFormatter={(value) => formatNumber(value)}
-        />
+          <YAxis
+            yAxisId="tokens"
+            stroke="hsl(var(--muted-foreground))"
+            tick={{ fontSize: 11 }}
+            tickFormatter={(value) => formatNumber(value)}
+          />
 
-        <YAxis
-          yAxisId="requests"
-          orientation="right"
-          stroke="hsl(262 83% 58%)"
-          tick={{ fontSize: 11 }}
-        />
+          <YAxis
+            yAxisId="requests"
+            orientation="right"
+            stroke="hsl(262 83% 58%)"
+            tick={{ fontSize: 11 }}
+          />
 
-        <Tooltip
-          contentStyle={{
-            backgroundColor: 'hsl(var(--card))',
-            border: '1px solid hsl(var(--border))',
-            borderRadius: '0.5rem',
-            fontSize: '12px',
-          }}
-          formatter={(value: number, name: string) => {
-            if (name === '输入 Tokens' || name === '输出 Tokens') {
-              return formatNumber(value)
-            }
-            return value
-          }}
-        />
+          <Tooltip
+            contentStyle={{
+              backgroundColor: 'hsl(var(--card))',
+              border: '1px solid hsl(var(--border))',
+              borderRadius: '0.5rem',
+              fontSize: '12px',
+            }}
+            formatter={(value: number, name: string) => {
+              if (name === '输入 Tokens' || name === '输出 Tokens') {
+                return formatNumber(value)
+              }
+              return value
+            }}
+          />
 
-        <Legend wrapperStyle={{ fontSize: '12px' }} iconType="line" />
+          <Legend wrapperStyle={{ fontSize: '12px' }} iconType="line" />
 
-        <Area
-          yAxisId="tokens"
-          type="monotone"
-          dataKey="inputTokens"
-          name="输入 Tokens"
-          stroke="hsl(217 91% 60%)"
-          fill="url(#inputGradient)"
-          strokeWidth={2}
-        />
+          <Area
+            yAxisId="tokens"
+            type="monotone"
+            dataKey="inputTokens"
+            name="输入 Tokens"
+            stroke="hsl(217 91% 60%)"
+            fill="url(#inputGradient)"
+            strokeWidth={2}
+          />
 
-        <Area
-          yAxisId="tokens"
-          type="monotone"
-          dataKey="outputTokens"
-          name="输出 Tokens"
-          stroke="hsl(142 71% 45%)"
-          fill="url(#outputGradient)"
-          strokeWidth={2}
-        />
+          <Area
+            yAxisId="tokens"
+            type="monotone"
+            dataKey="outputTokens"
+            name="输出 Tokens"
+            stroke="hsl(142 71% 45%)"
+            fill="url(#outputGradient)"
+            strokeWidth={2}
+          />
 
-        <Line
-          yAxisId="requests"
-          type="monotone"
-          dataKey="requests"
-          name="请求次数"
-          stroke="hsl(262 83% 58%)"
-          strokeWidth={2}
-          dot={{ r: 3 }}
-        />
-      </ComposedChart>
-    </ResponsiveContainer>
+          <Line
+            yAxisId="requests"
+            type="monotone"
+            dataKey="requests"
+            name="请求次数"
+            stroke="hsl(262 83% 58%)"
+            strokeWidth={2}
+            dot={{ r: 3 }}
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+
+      {/* 数据表格 */}
+      <div className="border rounded-lg overflow-hidden">
+        <div className="overflow-x-auto max-w-full" style={{ WebkitOverflowScrolling: 'touch' }}>
+          <table className="text-xs sm:text-sm w-full">
+            <thead className="bg-muted/50">
+              <tr className="border-b">
+                <th className="text-left py-2 px-3 font-medium whitespace-nowrap">时间</th>
+                <th className="text-right py-2 px-3 font-medium whitespace-nowrap">输入 Tokens</th>
+                <th className="text-right py-2 px-3 font-medium whitespace-nowrap">输出 Tokens</th>
+                <th className="text-right py-2 px-3 font-medium whitespace-nowrap">总计</th>
+                <th className="text-right py-2 px-3 font-medium whitespace-nowrap">请求次数</th>
+              </tr>
+            </thead>
+            <tbody>
+              {chartData.map((item, idx) => (
+                <tr key={idx} className="border-b last:border-0 hover:bg-muted/30">
+                  <td className="py-2 px-3 text-muted-foreground whitespace-nowrap" title={item.fullTime}>
+                    {item.time}
+                  </td>
+                  <td className="py-2 px-3 text-right text-blue-600 whitespace-nowrap">
+                    {formatNumber(item.inputTokens)}
+                  </td>
+                  <td className="py-2 px-3 text-right text-green-600 whitespace-nowrap">
+                    {formatNumber(item.outputTokens)}
+                  </td>
+                  <td className="py-2 px-3 text-right font-medium whitespace-nowrap">
+                    {formatNumber(item.inputTokens + item.outputTokens)}
+                  </td>
+                  <td className="py-2 px-3 text-right text-purple-600 whitespace-nowrap">
+                    {item.requests}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   )
 }
 
