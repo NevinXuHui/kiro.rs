@@ -2,9 +2,10 @@
 
 use anyhow::{Context, Result};
 use reqwest::Client;
-use std::time::Duration;
 
 use super::types::*;
+use crate::http_client::{build_client, ProxyConfig};
+use crate::model::config::TlsBackend;
 
 /// 同步客户端
 #[derive(Clone)]
@@ -19,10 +20,13 @@ pub struct SyncClient {
 
 impl SyncClient {
     /// 创建新的同步客户端
-    pub fn new(server_url: String, auth_token: Option<String>) -> Result<Self> {
-        let client = Client::builder()
-            .timeout(Duration::from_secs(30))
-            .build()
+    pub fn new(
+        server_url: String,
+        auth_token: Option<String>,
+        proxy: Option<&ProxyConfig>,
+        tls_backend: TlsBackend,
+    ) -> Result<Self> {
+        let client = build_client(proxy, 30, tls_backend)
             .context("创建 HTTP 客户端失败")?;
 
         Ok(Self {

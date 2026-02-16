@@ -64,7 +64,7 @@ pub struct TokenSync {
 
 /// Token 使用量同步数据
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 pub struct TokenUsageSync {
     pub token_id: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -85,7 +85,7 @@ pub struct TokenUsageSync {
 
 /// Token 订阅同步数据
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 pub struct TokenSubscriptionSync {
     pub token_id: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -100,7 +100,7 @@ pub struct TokenSubscriptionSync {
 
 /// Token 奖励同步数据
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 pub struct TokenBonusSync {
     pub token_id: u64,
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -105,6 +105,10 @@ pub fn build_client(
 
         builder = builder.proxy(proxy);
         tracing::debug!("HTTP Client 使用代理: {}", proxy_config.url);
+    } else {
+        // 显式禁用系统代理
+        builder = builder.no_proxy();
+        tracing::debug!("HTTP Client 禁用代理");
     }
 
     Ok(builder.build()?)

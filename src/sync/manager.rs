@@ -9,8 +9,9 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::time;
 
+use crate::http_client::ProxyConfig;
 use crate::kiro::model::credentials::KiroCredentials;
-use crate::model::config::{Config, SyncConfig};
+use crate::model::config::{Config, SyncConfig, TlsBackend};
 use crate::sync::{AuthClient, DeviceClient, DeviceInfo, SyncClient};
 use crate::sync::types::{PushChangesRequest, TokenSync};
 
@@ -30,6 +31,10 @@ pub struct SyncManager {
     config_path: Arc<RwLock<Option<std::path::PathBuf>>>,
     /// 本地凭据数据（用于上报）
     credentials: Arc<RwLock<Vec<KiroCredentials>>>,
+    /// 代理配置
+    proxy_config: Arc<RwLock<Option<ProxyConfig>>>,
+    /// TLS 后端
+    tls_backend: TlsBackend,
 }
 
 impl SyncManager {
@@ -37,9 +42,23 @@ impl SyncManager {
     pub fn new(config: &Config) -> Self {
         let sync_config = config.sync_config.clone();
 
+        // 构建代理配置
+        let proxy_config = config.proxy_url.as_ref().map(|url| {
+            let mut proxy = ProxyConfig::new(url);
+            if let (Some(username), Some(password)) = (&config.proxy_username, &config.proxy_password) {
+                proxy = proxy.with_auth(username, password);
+            }
+            proxy
+        });
+
         // 如果配置了同步，创建 HTTP 客户端
         let http_client = if let Some(ref cfg) = sync_config {
-            match SyncClient::new(cfg.server_url.clone(), cfg.auth_token.clone()) {
+            match SyncClient::new(
+                cfg.server_url.clone(),
+                cfg.auth_token.clone(),
+                proxy_config.as_ref(),
+                config.tls_backend,
+            ) {
                 Ok(client) => Some(client),
                 Err(e) => {
                     tracing::warn!("创建同步客户端失败: {}", e);
@@ -68,13 +87,21 @@ impl SyncManager {
             device_info: Arc::new(RwLock::new(None)),
             config_path: Arc::new(RwLock::new(config.config_path().map(|p| p.to_path_buf()))),
             credentials: Arc::new(RwLock::new(Vec::new())),
+            proxy_config: Arc::new(RwLock::new(proxy_config)),
+            tls_backend: config.tls_backend,
         }
     }
 
     /// 更新同步配置
     pub fn update_config(&self, config: SyncConfig) -> Result<()> {
         // 更新 HTTP 客户端
-        let http_client = SyncClient::new(config.server_url.clone(), config.auth_token.clone())?;
+        let proxy = self.proxy_config.read().clone();
+        let http_client = SyncClient::new(
+            config.server_url.clone(),
+            config.auth_token.clone(),
+            proxy.as_ref(),
+            self.tls_backend,
+        )?;
         *self.http_client.write() = Some(http_client);
 
         // 更新 WebSocket 客户端
@@ -151,7 +178,8 @@ impl SyncManager {
         tracing::info!("开始自动认证到同步服务器...");
 
         // 创建认证客户端并认证（不持有锁）
-        let auth_client = AuthClient::new(server_url.clone())?;
+        let proxy = self.proxy_config.read().clone();
+        let auth_client = AuthClient::new(server_url.clone(), proxy.as_ref(), self.tls_backend)?;
         let token = auth_client.auto_authenticate(email, password).await?;
 
         // 保存 token 到配置
@@ -171,7 +199,13 @@ impl SyncManager {
         }
 
         // 更新 HTTP 客户端的 token
-        if let Ok(client) = SyncClient::new(server_url, Some(token.clone())) {
+        let proxy = self.proxy_config.read().clone();
+        if let Ok(client) = SyncClient::new(
+            server_url,
+            Some(token.clone()),
+            proxy.as_ref(),
+            self.tls_backend,
+        ) {
             *self.http_client.write() = Some(client);
         }
 
@@ -526,6 +560,8 @@ impl Clone for SyncManager {
             device_info: self.device_info.clone(),
             config_path: self.config_path.clone(),
             credentials: self.credentials.clone(),
+            proxy_config: self.proxy_config.clone(),
+            tls_backend: self.tls_backend,
         }
     }
 }

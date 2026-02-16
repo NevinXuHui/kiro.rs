@@ -3,7 +3,9 @@
 use anyhow::{Context, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
+
+use crate::http_client::{build_client, ProxyConfig};
+use crate::model::config::TlsBackend;
 
 /// 注册请求
 #[derive(Debug, Serialize)]
@@ -42,13 +44,12 @@ pub struct AuthClient {
 
 impl AuthClient {
     /// 创建新的认证客户端
-    pub fn new(server_url: String) -> Result<Self> {
-        let client = Client::builder()
-            .timeout(Duration::from_secs(30))
-            .connect_timeout(Duration::from_secs(10))
-            .pool_idle_timeout(Duration::from_secs(90))
-            .pool_max_idle_per_host(10)
-            .build()
+    pub fn new(
+        server_url: String,
+        proxy: Option<&ProxyConfig>,
+        tls_backend: TlsBackend,
+    ) -> Result<Self> {
+        let client = build_client(proxy, 30, tls_backend)
             .context("创建 HTTP 客户端失败")?;
 
         Ok(Self {
