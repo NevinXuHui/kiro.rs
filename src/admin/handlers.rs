@@ -9,7 +9,7 @@ use axum::{
 use super::{
     middleware::AdminState,
     types::{
-        AddCredentialRequest, ConnectivityTestRequest, ConnectivityTestResponse,
+        self, AddCredentialRequest, ConnectivityTestRequest, ConnectivityTestResponse,
         CreateApiKeyRequest, CreateApiKeyResponse, ProxyConfigResponse,
         SetDisabledRequest, SetLoadBalancingModeRequest, SetPriorityRequest, SuccessResponse,
         UpdateApiKeyRequest, UpdateProxyConfigRequest,
@@ -911,11 +911,177 @@ pub async fn get_device_info(State(state): State<AdminState>) -> impl IntoRespon
 
 /// GET /api/admin/sync/devices
 /// 获取在线设备列表
-pub async fn get_online_devices(State(_state): State<AdminState>) -> impl IntoResponse {
-    // TODO: 从服务器获取在线设备列表
-    Json(serde_json::json!({
-        "devices": []
-    }))
+pub async fn get_online_devices(State(state): State<AdminState>) -> impl IntoResponse {
+    let sync_manager = match state.sync_manager.as_ref() {
+        Some(sm) => sm,
+        None => {
+            return (
+                axum::http::StatusCode::BAD_GATEWAY,
+                Json(types::AdminErrorResponse::api_error("同步功能未启用")),
+            )
+                .into_response()
+        }
+    };
+
+    // 从 SyncManager 获取在线设备列表
+    match sync_manager.get_online_devices().await {
+        Ok(devices) => Json(types::OnlineDevicesResponse {
+            count: devices.len(),
+            devices,
+        })
+        .into_response(),
+        Err(e) => (
+            axum::http::StatusCode::BAD_GATEWAY,
+            Json(types::AdminErrorResponse::api_error(format!(
+                "获取设备列表失败: {}",
+                e
+            ))),
+        )
+            .into_response(),
+    }
+}
+
+/// POST /api/admin/devices/:device_id/credentials
+/// 推送凭证到指定设备
+pub async fn push_credential_to_device(
+    State(state): State<AdminState>,
+    Path(device_id): Path<String>,
+    Json(req): Json<types::AddCredentialRequest>,
+) -> impl IntoResponse {
+    let sync_manager = match state.sync_manager.as_ref() {
+        Some(sm) => sm,
+        None => {
+            return (
+                axum::http::StatusCode::BAD_GATEWAY,
+                Json(types::AdminErrorResponse::api_error("同步功能未启用")),
+            )
+                .into_response()
+        }
+    };
+
+    // 1. 验证设备在线
+    let is_online = match sync_manager.is_device_online(&device_id).await {
+        Ok(online) => online,
+        Err(e) => {
+            return (
+                axum::http::StatusCode::BAD_GATEWAY,
+                Json(types::AdminErrorResponse::api_error(format!(
+                    "检查设备状态失败: {}",
+                    e
+                ))),
+            )
+                .into_response()
+        }
+    };
+
+    if !is_online {
+        return (
+            axum::http::StatusCode::NOT_FOUND,
+            Json(types::AdminErrorResponse::not_found("设备不在线")),
+        )
+            .into_response();
+    }
+
+    // 2. 构建凭证对象
+    let credential = crate::kiro::model::credentials::KiroCredentials {
+        refresh_token: Some(req.refresh_token),
+        auth_method: Some(req.auth_method),
+        client_id: req.client_id,
+        client_secret: req.client_secret,
+        priority: req.priority,
+        region: req.region,
+        auth_region: req.auth_region,
+        api_region: req.api_region,
+        machine_id: req.machine_id,
+        email: req.email,
+        proxy_url: req.proxy_url,
+        proxy_username: req.proxy_username,
+        proxy_password: req.proxy_password,
+        ..Default::default()
+    };
+
+    // 3. 通过服务器 API 推送凭证
+    match sync_manager
+        .push_credential_to_device(&device_id, credential)
+        .await
+    {
+        Ok(command_id) => Json(types::PushCredentialResponse {
+            success: true,
+            command_id,
+            message: "凭证推送请求已发送".to_string(),
+        })
+        .into_response(),
+        Err(e) => (
+            axum::http::StatusCode::BAD_GATEWAY,
+            Json(types::AdminErrorResponse::api_error(format!(
+                "推送凭证失败: {}",
+                e
+            ))),
+        )
+            .into_response(),
+    }
+}
+
+/// DELETE /api/admin/devices/:device_id/credentials/:credential_id
+/// 删除设备上的凭证
+pub async fn delete_device_credential(
+    State(state): State<AdminState>,
+    Path((device_id, credential_id)): Path<(String, u64)>,
+) -> impl IntoResponse {
+    let sync_manager = match state.sync_manager.as_ref() {
+        Some(sm) => sm,
+        None => {
+            return (
+                axum::http::StatusCode::BAD_GATEWAY,
+                Json(types::AdminErrorResponse::api_error("同步功能未启用")),
+            )
+                .into_response()
+        }
+    };
+
+    // 1. 验证设备在线
+    let is_online = match sync_manager.is_device_online(&device_id).await {
+        Ok(online) => online,
+        Err(e) => {
+            return (
+                axum::http::StatusCode::BAD_GATEWAY,
+                Json(types::AdminErrorResponse::api_error(format!(
+                    "检查设备状态失败: {}",
+                    e
+                ))),
+            )
+                .into_response()
+        }
+    };
+
+    if !is_online {
+        return (
+            axum::http::StatusCode::NOT_FOUND,
+            Json(types::AdminErrorResponse::not_found("设备不在线")),
+        )
+            .into_response();
+    }
+
+    // 2. 通过服务器 API 删除凭证
+    match sync_manager
+        .delete_device_credential(&device_id, credential_id)
+        .await
+    {
+        Ok(command_id) => Json(types::PushCredentialResponse {
+            success: true,
+            command_id,
+            message: "删除凭证请求已发送".to_string(),
+        })
+        .into_response(),
+        Err(e) => (
+            axum::http::StatusCode::BAD_GATEWAY,
+            Json(types::AdminErrorResponse::api_error(format!(
+                "删除凭证失败: {}",
+                e
+            ))),
+        )
+            .into_response(),
+    }
 }
 
 /// POST /api/admin/sync/test

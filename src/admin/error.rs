@@ -20,6 +20,12 @@ pub enum AdminServiceError {
 
     /// 凭据无效（验证失败）
     InvalidCredential(String),
+
+    /// 设备离线
+    DeviceOffline,
+
+    /// 同步错误
+    SyncError(String),
 }
 
 impl fmt::Display for AdminServiceError {
@@ -31,6 +37,8 @@ impl fmt::Display for AdminServiceError {
             AdminServiceError::UpstreamError(msg) => write!(f, "上游服务错误: {}", msg),
             AdminServiceError::InternalError(msg) => write!(f, "内部错误: {}", msg),
             AdminServiceError::InvalidCredential(msg) => write!(f, "凭据无效: {}", msg),
+            AdminServiceError::DeviceOffline => write!(f, "设备不在线"),
+            AdminServiceError::SyncError(msg) => write!(f, "同步错误: {}", msg),
         }
     }
 }
@@ -45,6 +53,8 @@ impl AdminServiceError {
             AdminServiceError::UpstreamError(_) => StatusCode::BAD_GATEWAY,
             AdminServiceError::InternalError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             AdminServiceError::InvalidCredential(_) => StatusCode::BAD_REQUEST,
+            AdminServiceError::DeviceOffline => StatusCode::NOT_FOUND,
+            AdminServiceError::SyncError(_) => StatusCode::BAD_GATEWAY,
         }
     }
 
@@ -59,6 +69,8 @@ impl AdminServiceError {
             AdminServiceError::InvalidCredential(_) => {
                 AdminErrorResponse::invalid_request(self.to_string())
             }
+            AdminServiceError::DeviceOffline => AdminErrorResponse::not_found(self.to_string()),
+            AdminServiceError::SyncError(_) => AdminErrorResponse::api_error(self.to_string()),
         }
     }
 }

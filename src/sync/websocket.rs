@@ -86,7 +86,11 @@ impl DeviceClient {
     }
 
     /// 连接并注册设备
-    pub async fn connect_and_register(&self, device_info: DeviceInfo) -> Result<()> {
+    pub async fn connect_and_register(
+        &self,
+        device_info: DeviceInfo,
+        token_manager: Arc<crate::kiro::token_manager::MultiTokenManager>,
+    ) -> Result<()> {
         *self.device_info.write().await = Some(device_info.clone());
         *self.state.write().await = ConnectionState::Connecting;
 
@@ -166,6 +170,16 @@ impl DeviceClient {
                             }
                             _ => {}
                         }
+                    }
+                    .boxed()
+                }
+            })
+            .on("credential:command", {
+                let token_manager = token_manager.clone();
+                move |payload, client| {
+                    let token_manager = token_manager.clone();
+                    async move {
+                        Self::handle_credential_command(payload, token_manager, client).await;
                     }
                     .boxed()
                 }
@@ -284,6 +298,141 @@ impl DeviceClient {
             tracing::info!("已断开 Socket.IO 连接");
         }
         Ok(())
+    }
+
+    /// 处理凭证命令
+    async fn handle_credential_command(
+        payload: Payload,
+        token_manager: Arc<crate::kiro::token_manager::MultiTokenManager>,
+        client: Client,
+    ) {
+        let response = match payload {
+            Payload::Text(values) => {
+                if let Some(value) = values.first() {
+                    tracing::debug!("收到命令 payload: {:?}", value);
+                    match serde_json::from_value::<crate::sync::types::DeviceCommand>(value.clone()) {
+                        Ok(command) => {
+                            tracing::info!("命令解析成功，开始执行");
+                            Self::execute_command(command, token_manager).await
+                        },
+                        Err(e) => {
+                            tracing::error!("解析命令失败: {}, payload: {:?}", e, value);
+                            crate::sync::types::CommandResponse {
+                                command_id: "unknown".to_string(),
+                                success: false,
+                                error: Some(format!("解析命令失败: {}", e)),
+                                data: None,
+                            }
+                        },
+                    }
+                } else {
+                    tracing::warn!("payload 为空");
+                    return;
+                }
+            }
+            _ => {
+                tracing::warn!("收到非文本 payload");
+                return;
+            }
+        };
+
+        // 发送响应
+        if let Err(e) = client
+            .emit(
+                "credential:response",
+                serde_json::to_value(&response).unwrap(),
+            )
+            .await
+        {
+            tracing::error!("发送命令响应失败: {}", e);
+        }
+    }
+
+    /// 执行具体命令
+    async fn execute_command(
+        command: crate::sync::types::DeviceCommand,
+        token_manager: Arc<crate::kiro::token_manager::MultiTokenManager>,
+    ) -> crate::sync::types::CommandResponse {
+        use crate::sync::types::{CommandResponse, DeviceCommand};
+
+        match command {
+            DeviceCommand::AddCredential {
+                credential,
+                command_id,
+            } => {
+                tracing::info!("收到添加凭证命令: {}", command_id);
+                match token_manager.add_credential(credential).await {
+                    Ok(id) => {
+                        tracing::info!("凭证添加成功，ID: {}", id);
+                        CommandResponse {
+                            command_id,
+                            success: true,
+                            error: None,
+                            data: Some(json!({ "credentialId": id })),
+                        }
+                    },
+                    Err(e) => {
+                        tracing::error!("凭证添加失败: {}", e);
+                        CommandResponse {
+                            command_id,
+                            success: false,
+                            error: Some(e.to_string()),
+                            data: None,
+                        }
+                    },
+                }
+            }
+            DeviceCommand::DeleteCredential {
+                credential_id,
+                command_id,
+            } => {
+                tracing::info!(
+                    "收到删除凭证命令: {} (ID: {})",
+                    command_id,
+                    credential_id
+                );
+                match token_manager.delete_credential(credential_id) {
+                    Ok(_) => CommandResponse {
+                        command_id,
+                        success: true,
+                        error: None,
+                        data: None,
+                    },
+                    Err(e) => CommandResponse {
+                        command_id,
+                        success: false,
+                        error: Some(e.to_string()),
+                        data: None,
+                    },
+                }
+            }
+            DeviceCommand::SetDisabled {
+                credential_id,
+                disabled,
+                command_id,
+            } => {
+                tracing::info!(
+                    "收到设置凭证状态命令: {} (ID: {}, disabled: {})",
+                    command_id,
+                    credential_id,
+                    disabled
+                );
+                match token_manager.set_disabled(credential_id, disabled) {
+                    Ok(_) => CommandResponse {
+                        command_id,
+                        success: true,
+                        error: None,
+                        data: None,
+                    },
+                    Err(e) => CommandResponse {
+                        command_id,
+                        success: false,
+                        error: Some(e.to_string()),
+                        data: None,
+                    },
+                }
+            }
+        }
     }
 }
 

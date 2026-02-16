@@ -248,7 +248,11 @@ impl SyncManager {
     }
 
     /// 启动同步服务
-    pub async fn start(&self, device_name: String) -> Result<()> {
+    pub async fn start(
+        &self,
+        device_name: String,
+        token_manager: Arc<crate::kiro::token_manager::MultiTokenManager>,
+    ) -> Result<()> {
         if !self.is_enabled() {
             tracing::info!("同步功能未启用");
             return Ok(());
@@ -288,7 +292,7 @@ impl SyncManager {
         // 连接 WebSocket
         let ws_client = self.ws_client.read().as_ref().cloned();
         if let Some(client) = ws_client {
-            match client.connect_and_register(device_info).await {
+            match client.connect_and_register(device_info, token_manager.clone()).await {
                 Ok(_) => tracing::info!("WebSocket 设备连接成功"),
                 Err(e) => tracing::debug!("WebSocket 连接失败（服务器可能未运行）: {}", e),
             }
@@ -547,6 +551,106 @@ impl SyncManager {
             .context("同步客户端未初始化")?;
 
         client.test_connection().await
+    }
+
+    /// 获取在线设备列表（从服务器查询）
+    pub async fn get_online_devices(&self) -> Result<Vec<crate::sync::types::OnlineDeviceInfo>> {
+        let config = self.config.read().clone().context("同步未配置")?;
+        let server_url = config.server_url;
+        let auth_token = config.auth_token.context("未认证")?;
+
+        // 构建 HTTP 客户端
+        let proxy = self.proxy_config.read().clone();
+        let client = crate::http_client::build_client(proxy.as_ref(), 30, self.tls_backend)
+            .context("创建 HTTP 客户端失败")?;
+
+        // 调用服务器 API
+        let url = format!("{}/api/devices", server_url);
+        let response = client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", auth_token))
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            anyhow::bail!("获取设备列表失败: {}", response.status());
+        }
+
+        let result: crate::sync::types::DevicesResponse = response.json().await?;
+        Ok(result.devices)
+    }
+
+    /// 检查设备是否在线
+    pub async fn is_device_online(&self, device_id: &str) -> Result<bool> {
+        let devices = self.get_online_devices().await?;
+        Ok(devices.iter().any(|d| d.device_id == device_id))
+    }
+
+    /// 推送凭证到指定设备
+    pub async fn push_credential_to_device(
+        &self,
+        device_id: &str,
+        credential: KiroCredentials,
+    ) -> Result<String> {
+        let config = self.config.read().clone().context("同步未配置")?;
+        let server_url = config.server_url;
+        let auth_token = config.auth_token.context("未认证")?;
+
+        // 构建 HTTP 客户端
+        let proxy = self.proxy_config.read().clone();
+        let client = crate::http_client::build_client(proxy.as_ref(), 30, self.tls_backend)
+            .context("创建 HTTP 客户端失败")?;
+
+        // 调用服务器推送 API
+        let url = format!("{}/api/devices/{}/credentials", server_url, device_id);
+        let response = client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", auth_token))
+            .json(&credential)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            anyhow::bail!("推送凭证失败: {}", error_text);
+        }
+
+        let result: crate::sync::types::PushCredentialResult = response.json().await?;
+        Ok(result.command_id)
+    }
+
+    /// 删除设备上的凭证
+    pub async fn delete_device_credential(
+        &self,
+        device_id: &str,
+        credential_id: u64,
+    ) -> Result<String> {
+        let config = self.config.read().clone().context("同步未配置")?;
+        let server_url = config.server_url;
+        let auth_token = config.auth_token.context("未认证")?;
+
+        // 构建 HTTP 客户端
+        let proxy = self.proxy_config.read().clone();
+        let client = crate::http_client::build_client(proxy.as_ref(), 30, self.tls_backend)
+            .context("创建 HTTP 客户端失败")?;
+
+        let url = format!(
+            "{}/api/devices/{}/credentials/{}",
+            server_url, device_id, credential_id
+        );
+        let response = client
+            .delete(&url)
+            .header("Authorization", format!("Bearer {}", auth_token))
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            anyhow::bail!("删除凭证失败: {}", error_text);
+        }
+
+        let result: crate::sync::types::PushCredentialResult = response.json().await?;
+        Ok(result.command_id)
     }
 }
 

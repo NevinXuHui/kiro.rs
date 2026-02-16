@@ -136,6 +136,7 @@ async fn main() {
     if sync_manager.is_enabled() {
         let sync_manager_clone = sync_manager.clone();
         let credentials_for_sync = credentials_list.clone();
+        let token_manager_for_sync = token_manager.clone();
 
         // 使用 tokio::task::spawn 而不是 tokio::spawn
         tokio::task::spawn(async move {
@@ -150,7 +151,7 @@ async fn main() {
             // 更新凭据数据
             sync_manager_clone.update_credentials(credentials_for_sync);
 
-            if let Err(e) = sync_manager_clone.start(device_name).await {
+            if let Err(e) = sync_manager_clone.start(device_name, token_manager_for_sync).await {
                 tracing::error!("启动同步服务失败: {}", e);
             } else {
                 tracing::info!("同步服务已启动");

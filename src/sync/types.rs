@@ -147,3 +147,63 @@ pub struct DeleteResponse {
     pub message: String,
     pub current_version: u64,
 }
+
+/// 设备命令（服务器推送到客户端）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum DeviceCommand {
+    AddCredential {
+        credential: crate::kiro::model::credentials::KiroCredentials,
+        command_id: String,
+    },
+    DeleteCredential {
+        credential_id: u64,
+        command_id: String,
+    },
+    SetDisabled {
+        credential_id: u64,
+        disabled: bool,
+        command_id: String,
+    },
+}
+
+/// 命令执行响应
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommandResponse {
+    pub command_id: String,
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<serde_json::Value>,
+}
+
+/// 在线设备信息（从服务器 API 返回）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OnlineDeviceInfo {
+    pub device_id: String,
+    pub device_name: String,
+    pub device_type: String,
+    pub account_type: String,
+    pub user_id: u64,
+    pub user_email: String,
+    pub connected_at: u64,
+    pub last_heartbeat: u64,
+}
+
+/// 设备列表响应
+#[derive(Debug, Deserialize)]
+pub struct DevicesResponse {
+    pub devices: Vec<OnlineDeviceInfo>,
+    pub count: usize,
+}
+
+/// 推送凭证结果
+#[derive(Debug, Deserialize)]
+pub struct PushCredentialResult {
+    pub success: bool,
+    pub command_id: String,
+    pub message: String,
+}

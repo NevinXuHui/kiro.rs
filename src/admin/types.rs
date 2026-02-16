@@ -347,3 +347,22 @@ impl AdminErrorResponse {
         Self::new("internal_error", message)
     }
 }
+
+// ============ 设备管理 ============
+
+/// 在线设备列表响应
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OnlineDevicesResponse {
+    pub devices: Vec<crate::sync::types::OnlineDeviceInfo>,
+    pub count: usize,
+}
+
+/// 推送凭证响应
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PushCredentialResponse {
+    pub success: bool,
+    pub command_id: String,
+    pub message: String,
+}

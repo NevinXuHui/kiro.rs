@@ -1523,10 +1523,15 @@ impl MultiTokenManager {
     /// - `Ok(u64)` - 新凭据 ID
     /// - `Err(_)` - 验证失败或添加失败
     pub async fn add_credential(&self, new_cred: KiroCredentials) -> anyhow::Result<u64> {
+        tracing::info!("开始添加凭证，email: {:?}", new_cred.email);
+
         // 1. 基本验证
+        tracing::debug!("步骤 1: 基本验证");
         validate_refresh_token(&new_cred)?;
+        tracing::debug!("基本验证通过");
 
         // 2. 基于 refreshToken 的 SHA-256 哈希检测重复
+        tracing::debug!("步骤 2: 检测重复");
         let new_refresh_token = new_cred
             .refresh_token
             .as_deref()
@@ -1545,22 +1550,29 @@ impl MultiTokenManager {
             })
         };
         if duplicate_exists {
+            tracing::warn!("凭据已存在（refreshToken 重复）");
             anyhow::bail!("凭据已存在（refreshToken 重复）");
         }
+        tracing::debug!("重复检测通过");
 
         // 3. 尝试刷新 Token 验证凭据有效性
+        tracing::info!("步骤 3: 开始验证 Token 有效性（调用 AWS API）");
         let global_proxy = self.shared_proxy.get();
         let effective_proxy = new_cred.effective_proxy(global_proxy.as_ref());
         let mut validated_cred =
             refresh_token(&new_cred, &self.config, effective_proxy.as_ref()).await?;
+        tracing::info!("Token 验证成功");
 
         // 4. 分配新 ID
+        tracing::debug!("步骤 4: 分配新 ID");
         let new_id = {
             let entries = self.entries.lock();
             entries.iter().map(|e| e.id).max().unwrap_or(0) + 1
         };
+        tracing::debug!("分配 ID: {}", new_id);
 
         // 5. 设置 ID 并保留用户输入的元数据
+        tracing::debug!("步骤 5: 设置凭证元数据");
         validated_cred.id = Some(new_id);
         validated_cred.priority = new_cred.priority;
         validated_cred.auth_method = new_cred.auth_method.map(|m| {
@@ -1580,8 +1592,10 @@ impl MultiTokenManager {
         validated_cred.proxy_url = new_cred.proxy_url;
         validated_cred.proxy_username = new_cred.proxy_username;
         validated_cred.proxy_password = new_cred.proxy_password;
+        tracing::debug!("元数据设置完成");
 
         {
+            tracing::debug!("步骤 6: 添加到凭证列表");
             let mut entries = self.entries.lock();
             entries.push(CredentialEntry {
                 id: new_id,
@@ -1592,10 +1606,13 @@ impl MultiTokenManager {
                 success_count: 0,
                 last_used_at: None,
             });
+            tracing::debug!("已添加到列表，当前总数: {}", entries.len());
         }
 
         // 6. 持久化
+        tracing::debug!("步骤 7: 持久化到文件");
         self.persist_credentials()?;
+        tracing::debug!("持久化完成");
 
         tracing::info!("成功添加凭据 #{}", new_id);
         Ok(new_id)
