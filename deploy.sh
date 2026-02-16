@@ -50,7 +50,7 @@ fi
 
 # nvm / node / pnpm
 NVM_DIR="$USER_HOME/.nvm"
-if [[ -d "$NVM_DIR" ]]; then
+if [[ -d "$NVM_DIR/versions/node" ]]; then
     NODE_DIR=$(find "$NVM_DIR/versions/node" -maxdepth 1 -type d | sort -V | tail -1)
     [[ -d "$NODE_DIR/bin" ]] && export PATH="$NODE_DIR/bin:$PATH"
 fi
