@@ -249,7 +249,7 @@ impl SyncManager {
 
     /// 启动同步服务
     pub async fn start(
-        &self,
+        self: Arc<Self>,
         device_name: String,
         token_manager: Arc<crate::kiro::token_manager::MultiTokenManager>,
     ) -> Result<()> {
@@ -292,7 +292,7 @@ impl SyncManager {
         // 连接 WebSocket
         let ws_client = self.ws_client.read().as_ref().cloned();
         if let Some(client) = ws_client {
-            match client.connect_and_register(device_info, token_manager.clone()).await {
+            match client.connect_and_register(device_info, token_manager.clone(), self.clone()).await {
                 Ok(_) => tracing::info!("WebSocket 设备连接成功"),
                 Err(e) => tracing::debug!("WebSocket 连接失败（服务器可能未运行）: {}", e),
             }

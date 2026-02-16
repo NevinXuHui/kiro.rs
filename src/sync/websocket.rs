@@ -90,6 +90,7 @@ impl DeviceClient {
         &self,
         device_info: DeviceInfo,
         token_manager: Arc<crate::kiro::token_manager::MultiTokenManager>,
+        sync_manager: Arc<crate::sync::manager::SyncManager>,
     ) -> Result<()> {
         *self.device_info.write().await = Some(device_info.clone());
         *self.state.write().await = ConnectionState::Connecting;
@@ -176,10 +177,12 @@ impl DeviceClient {
             })
             .on("credential:command", {
                 let token_manager = token_manager.clone();
+                let sync_manager = sync_manager.clone();
                 move |payload, client| {
                     let token_manager = token_manager.clone();
+                    let sync_manager = sync_manager.clone();
                     async move {
-                        Self::handle_credential_command(payload, token_manager, client).await;
+                        Self::handle_credential_command(payload, token_manager, sync_manager, client).await;
                     }
                     .boxed()
                 }
@@ -304,6 +307,7 @@ impl DeviceClient {
     async fn handle_credential_command(
         payload: Payload,
         token_manager: Arc<crate::kiro::token_manager::MultiTokenManager>,
+        sync_manager: Arc<crate::sync::manager::SyncManager>,
         client: Client,
     ) {
         let response = match payload {
@@ -313,7 +317,7 @@ impl DeviceClient {
                     match serde_json::from_value::<crate::sync::types::DeviceCommand>(value.clone()) {
                         Ok(command) => {
                             tracing::info!("命令解析成功，开始执行");
-                            Self::execute_command(command, token_manager).await
+                            Self::execute_command(command, token_manager, sync_manager).await
                         },
                         Err(e) => {
                             tracing::error!("解析命令失败: {}, payload: {:?}", e, value);
@@ -352,6 +356,7 @@ impl DeviceClient {
     async fn execute_command(
         command: crate::sync::types::DeviceCommand,
         token_manager: Arc<crate::kiro::token_manager::MultiTokenManager>,
+        sync_manager: Arc<crate::sync::manager::SyncManager>,
     ) -> crate::sync::types::CommandResponse {
         use crate::sync::types::{CommandResponse, DeviceCommand};
 
@@ -364,6 +369,15 @@ impl DeviceClient {
                 match token_manager.add_credential(credential).await {
                     Ok(id) => {
                         tracing::info!("凭证添加成功，ID: {}", id);
+
+                        // 触发同步，将新凭证上报到服务器
+                        tracing::info!("触发同步，上报新凭证到服务器");
+                        if let Err(e) = sync_manager.sync_now().await {
+                            tracing::warn!("同步失败: {}", e);
+                        } else {
+                            tracing::info!("同步成功");
+                        }
+
                         CommandResponse {
                             command_id,
                             success: true,
@@ -392,11 +406,19 @@ impl DeviceClient {
                     credential_id
                 );
                 match token_manager.delete_credential(credential_id) {
-                    Ok(_) => CommandResponse {
-                        command_id,
-                        success: true,
-                        error: None,
-                        data: None,
+                    Ok(_) => {
+                        // 触发同步
+                        tracing::info!("触发同步，更新凭证列表到服务器");
+                        if let Err(e) = sync_manager.sync_now().await {
+                            tracing::warn!("同步失败: {}", e);
+                        }
+
+                        CommandResponse {
+                            command_id,
+                            success: true,
+                            error: None,
+                            data: None,
+                        }
                     },
                     Err(e) => CommandResponse {
                         command_id,
@@ -418,11 +440,19 @@ impl DeviceClient {
                     disabled
                 );
                 match token_manager.set_disabled(credential_id, disabled) {
-                    Ok(_) => CommandResponse {
-                        command_id,
-                        success: true,
-                        error: None,
-                        data: None,
+                    Ok(_) => {
+                        // 触发同步
+                        tracing::info!("触发同步，更新凭证状态到服务器");
+                        if let Err(e) = sync_manager.sync_now().await {
+                            tracing::warn!("同步失败: {}", e);
+                        }
+
+                        CommandResponse {
+                            command_id,
+                            success: true,
+                            error: None,
+                            data: None,
+                        }
                     },
                     Err(e) => CommandResponse {
                         command_id,

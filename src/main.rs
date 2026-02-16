@@ -151,7 +151,7 @@ async fn main() {
             // 更新凭据数据
             sync_manager_clone.update_credentials(credentials_for_sync);
 
-            if let Err(e) = sync_manager_clone.start(device_name, token_manager_for_sync).await {
+            if let Err(e) = sync_manager_clone.clone().start(device_name, token_manager_for_sync).await {
                 tracing::error!("启动同步服务失败: {}", e);
             } else {
                 tracing::info!("同步服务已启动");

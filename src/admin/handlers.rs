@@ -533,13 +533,38 @@ pub async fn get_logs(
 
     let level = params.get("level").map(|s| s.as_str()).unwrap_or("all");
 
-    let log_path = "logs/kiro.log";
+    // 查找最新的日志文件
+    let log_path = match std::fs::read_dir("logs") {
+        Ok(entries) => {
+            let mut log_files: Vec<_> = entries
+                .filter_map(|e| e.ok())
+                .filter(|e| {
+                    e.file_name()
+                        .to_string_lossy()
+                        .starts_with("kiro.")
+                })
+                .collect();
+
+            // 按修改时间排序，获取最新的
+            log_files.sort_by_key(|e| {
+                e.metadata()
+                    .and_then(|m| m.modified())
+                    .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+            });
+
+            log_files
+                .last()
+                .map(|e| format!("logs/{}", e.file_name().to_string_lossy()))
+                .unwrap_or_else(|| "logs/kiro.log".to_string())
+        }
+        Err(_) => "logs/kiro.log".to_string(),
+    };
 
     // 使用 tail 命令获取最新日志
     let output = Command::new("tail")
         .arg("-n")
         .arg(lines.to_string())
-        .arg(log_path)
+        .arg(&log_path)
         .output();
 
     match output {
