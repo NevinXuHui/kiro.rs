@@ -6,6 +6,7 @@ mod common;
 mod http_client;
 mod kiro;
 mod model;
+mod sync;
 pub mod token;
 pub mod token_usage;
 mod user_api;
@@ -98,7 +99,7 @@ async fn main() {
     // 创建 MultiTokenManager 和 KiroProvider
     let token_manager = MultiTokenManager::new(
         config.clone(),
-        credentials_list,
+        credentials_list.clone(),
         shared_proxy.clone(),
         Some(credentials_path.into()),
         is_multiple_format,
@@ -127,6 +128,37 @@ async fn main() {
     let token_usage_tracker = Arc::new(token_usage::TokenUsageTracker::new(
         token_manager.cache_dir().map(|d| d.to_path_buf()),
     ));
+
+    // 创建同步管理器
+    let sync_manager = Arc::new(sync::SyncManager::new(&config));
+
+    // 如果启用了同步，启动同步服务（在后台任务中）
+    if sync_manager.is_enabled() {
+        let sync_manager_clone = sync_manager.clone();
+        let credentials_for_sync = credentials_list.clone();
+
+        // 使用 tokio::task::spawn 而不是 tokio::spawn
+        tokio::task::spawn(async move {
+            // 添加小延迟确保 tokio runtime 完全启动
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+            let device_name = hostname::get()
+                .ok()
+                .and_then(|h| h.into_string().ok())
+                .unwrap_or_else(|| "kiro-rs".to_string());
+
+            // 更新凭据数据
+            sync_manager_clone.update_credentials(credentials_for_sync);
+
+            if let Err(e) = sync_manager_clone.start(device_name).await {
+                tracing::error!("启动同步服务失败: {}", e);
+            } else {
+                tracing::info!("同步服务已启动");
+            }
+        });
+    } else {
+        tracing::info!("同步功能未启用");
+    }
 
     // 构建 Anthropic API 路由（从第一个凭据获取 profile_arn）
     let anthropic_app = anthropic::create_router_with_provider(
@@ -165,7 +197,8 @@ async fn main() {
                 .with_api_key_store(api_key_store.clone())
                 .with_shared_proxy(shared_proxy.clone())
                 .with_kiro_provider(kiro_provider_admin.clone())
-                .with_profile_arn(first_credentials.profile_arn.clone());
+                .with_profile_arn(first_credentials.profile_arn.clone())
+                .with_sync_manager(sync_manager.clone());
             let admin_app = admin::create_admin_router(admin_state);
 
             // 创建 Admin UI 路由

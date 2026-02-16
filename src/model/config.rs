@@ -90,9 +90,121 @@ pub struct Config {
     #[serde(default = "default_load_balancing_mode")]
     pub load_balancing_mode: String,
 
+    /// 同步服务器配置
+    #[serde(default = "default_sync_config")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sync_config: Option<SyncConfig>,
+
     /// 配置文件路径（运行时元数据，不写入 JSON）
     #[serde(skip)]
     config_path: Option<PathBuf>,
+}
+
+/// 账号类型（供应商/消耗商）
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum AccountType {
+    /// 供应商 - 提供账号的设备
+    Supplier,
+    /// 消耗商 - 消耗账号的设备
+    Consumer,
+}
+
+impl Default for AccountType {
+    fn default() -> Self {
+        Self::Consumer
+    }
+}
+
+impl AccountType {
+    /// 转换为字符串
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Supplier => "supplier",
+            Self::Consumer => "consumer",
+        }
+    }
+}
+
+/// 设备类型
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum DeviceType {
+    /// 桌面设备
+    Desktop,
+    /// 移动设备
+    Mobile,
+    /// 服务器
+    Server,
+}
+
+impl Default for DeviceType {
+    fn default() -> Self {
+        Self::Desktop
+    }
+}
+
+impl DeviceType {
+    /// 转换为字符串
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Desktop => "desktop",
+            Self::Mobile => "mobile",
+            Self::Server => "server",
+        }
+    }
+}
+
+/// 同步服务器配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncConfig {
+    /// 同步服务器地址（例如：http://localhost:3000）
+    pub server_url: String,
+
+    /// 用户邮箱（用于注册/登录）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+
+    /// 用户密码（用于注册/登录）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password: Option<String>,
+
+    /// JWT 认证 Token
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth_token: Option<String>,
+
+    /// 是否启用同步
+    #[serde(default = "default_sync_enabled")]
+    pub enabled: bool,
+
+    /// 同步间隔（秒），默认 300 秒（5 分钟）
+    #[serde(default = "default_sync_interval")]
+    pub sync_interval: u64,
+
+    /// WebSocket 心跳间隔（秒），默认 15 秒
+    #[serde(default = "default_heartbeat_interval")]
+    pub heartbeat_interval: u64,
+
+    /// 账号类型（supplier: 供应商, consumer: 消耗商）
+    #[serde(default, rename = "type")]
+    pub account_type: AccountType,
+
+    /// 设备类型（desktop: 桌面, mobile: 移动, server: 服务器）
+    #[serde(default)]
+    pub device_type: DeviceType,
+}
+
+fn default_sync_enabled() -> bool {
+    true
+}
+
+fn default_sync_interval() -> u64 {
+    300
+}
+
+fn default_heartbeat_interval() -> u64 {
+    15
 }
 
 fn default_host() -> String {
@@ -132,6 +244,20 @@ fn default_load_balancing_mode() -> String {
     "priority".to_string()
 }
 
+fn default_sync_config() -> Option<SyncConfig> {
+    Some(SyncConfig {
+        server_url: "http://127.0.0.1:3002".to_string(),
+        email: None,
+        password: None,
+        auth_token: None,
+        enabled: true,
+        sync_interval: default_sync_interval(),
+        heartbeat_interval: default_heartbeat_interval(),
+        account_type: AccountType::default(),
+        device_type: DeviceType::default(),
+    })
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -154,6 +280,7 @@ impl Default for Config {
             proxy_password: None,
             admin_api_key: None,
             load_balancing_mode: default_load_balancing_mode(),
+            sync_config: default_sync_config(),
             config_path: None,
         }
     }

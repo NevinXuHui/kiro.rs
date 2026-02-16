@@ -4,5 +4,12 @@
   "apiKey": "sk-kiro-rs-qazWSXedcRFV123456",
   "tlsBackend": "rustls",
   "region": "us-east-1",
-  "adminApiKey": "sk-admin-your-secret-key"
+  "adminApiKey": "sk-admin-your-secret-key",
+  "syncConfig": {
+    "serverUrl": "http://localhost:3000",
+    "authToken": "your-jwt-token-here",
+    "enabled": true,
+    "syncInterval": 300,
+    "heartbeatInterval": 15
+  }
 }
