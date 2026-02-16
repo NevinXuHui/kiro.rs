@@ -235,6 +235,12 @@ impl AdminService {
             proxy_password: req.proxy_password,
             disabled: false,
             disabled_reason: None,
+            sync_version: 0,
+            last_modified_at: None,
+            device_id: None,
+            device_name: None,
+            device_type: None,
+            last_sync_at: None,
         };
 
         // 调用 token_manager 添加凭据

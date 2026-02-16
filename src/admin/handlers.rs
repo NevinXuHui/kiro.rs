@@ -860,3 +860,101 @@ async fn test_anthropic_connectivity(state: &AdminState, model: Option<String>) 
         error: None,
     })
 }
+
+/// GET /api/admin/sync/config
+/// 获取同步配置
+pub async fn get_sync_config(State(state): State<AdminState>) -> impl IntoResponse {
+    if let Some(sync_manager) = &state.sync_manager {
+        // TODO: 从 SyncManager 获取配置
+        Json(serde_json::json!({
+            "config": {
+                "serverUrl": "",
+                "authToken": "",
+                "enabled": sync_manager.is_enabled(),
+                "syncInterval": 300,
+                "heartbeatInterval": 15
+            }
+        }))
+    } else {
+        Json(serde_json::json!({
+            "config": null
+        }))
+    }
+}
+
+/// POST /api/admin/sync/config
+/// 保存同步配置
+pub async fn save_sync_config(
+    State(_state): State<AdminState>,
+    Json(_payload): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    // TODO: 实现配置保存
+    Json(SuccessResponse::new("配置保存成功"))
+}
+
+/// GET /api/admin/sync/device
+/// 获取当前设备信息
+pub async fn get_device_info(State(state): State<AdminState>) -> impl IntoResponse {
+    if let Some(sync_manager) = &state.sync_manager {
+        if let Some(device_info) = sync_manager.get_device_info() {
+            return Json(serde_json::json!({
+                "device": {
+                    "deviceId": device_info.device_id,
+                    "deviceName": device_info.device_name,
+                    "deviceType": device_info.device_type
+                }
+            }));
+        }
+    }
+    Json(serde_json::json!({ "device": null }))
+}
+
+/// GET /api/admin/sync/devices
+/// 获取在线设备列表
+pub async fn get_online_devices(State(_state): State<AdminState>) -> impl IntoResponse {
+    // TODO: 从服务器获取在线设备列表
+    Json(serde_json::json!({
+        "devices": []
+    }))
+}
+
+/// POST /api/admin/sync/test
+/// 测试同步连接
+pub async fn test_sync_connection(
+    State(state): State<AdminState>,
+    Json(_payload): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    if let Some(sync_manager) = &state.sync_manager {
+        match sync_manager.test_connection().await {
+            Ok(_) => Json(serde_json::json!({
+                "success": true
+            })),
+            Err(e) => Json(serde_json::json!({
+                "success": false,
+                "error": e.to_string()
+            })),
+        }
+    } else {
+        Json(serde_json::json!({
+            "success": false,
+            "error": "同步管理器未初始化"
+        }))
+    }
+}
+
+/// POST /api/admin/sync/now
+/// 立即执行同步
+pub async fn sync_now(State(state): State<AdminState>) -> impl IntoResponse {
+    if let Some(sync_manager) = &state.sync_manager {
+        match sync_manager.sync_now().await {
+            Ok(_) => Json(SuccessResponse::new("同步成功")).into_response(),
+            Err(e) => Json(serde_json::json!({
+                "error": e.to_string()
+            })).into_response(),
+        }
+    } else {
+        Json(serde_json::json!({
+            "error": "同步管理器未初始化"
+        })).into_response()
+    }
+}

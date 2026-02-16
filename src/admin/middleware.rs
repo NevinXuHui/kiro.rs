@@ -17,6 +17,7 @@ use crate::api_key_store::ApiKeyStore;
 use crate::common::auth;
 use crate::http_client::SharedProxyConfig;
 use crate::kiro::provider::KiroProvider;
+use crate::sync::SyncManager;
 use crate::token_usage::TokenUsageTracker;
 
 /// Admin API 共享状态
@@ -36,6 +37,8 @@ pub struct AdminState {
     pub kiro_provider: Option<Arc<KiroProvider>>,
     /// Profile ARN（用于连通性测试）
     pub profile_arn: Option<String>,
+    /// 同步管理器
+    pub sync_manager: Option<Arc<SyncManager>>,
 }
 
 impl AdminState {
@@ -48,6 +51,7 @@ impl AdminState {
             shared_proxy: None,
             kiro_provider: None,
             profile_arn: None,
+            sync_manager: None,
         }
     }
 
@@ -73,6 +77,11 @@ impl AdminState {
 
     pub fn with_profile_arn(mut self, arn: Option<String>) -> Self {
         self.profile_arn = arn;
+        self
+    }
+
+    pub fn with_sync_manager(mut self, manager: Arc<SyncManager>) -> Self {
+        self.sync_manager = Some(manager);
         self
     }
 }

@@ -9,11 +9,13 @@ use super::{
     handlers::{
         add_credential, create_api_key, delete_api_key, delete_credential,
         get_all_credentials, get_api_key_by_id, get_credential_balance,
-        get_load_balancing_mode, get_logs, get_proxy_config, get_token_usage,
+        get_device_info, get_load_balancing_mode, get_logs, get_online_devices,
+        get_proxy_config, get_sync_config, get_token_usage,
         get_token_usage_timeseries, list_api_keys,
-        reset_failure_count, reset_token_usage, set_credential_disabled,
-        set_credential_priority, set_credential_primary, set_load_balancing_mode, set_proxy_config,
-        test_connectivity, update_api_key,
+        reset_failure_count, reset_token_usage, save_sync_config,
+        set_credential_disabled, set_credential_primary, set_credential_priority,
+        set_load_balancing_mode, set_proxy_config, sync_now,
+        test_connectivity, test_sync_connection, update_api_key,
     },
     middleware::{AdminState, admin_auth_middleware},
 };
@@ -76,6 +78,11 @@ pub fn create_admin_router(state: AdminState) -> Router {
                 .delete(delete_api_key),
         )
         .route("/logs", get(get_logs))
+        .route("/sync/config", get(get_sync_config).post(save_sync_config))
+        .route("/sync/device", get(get_device_info))
+        .route("/sync/devices", get(get_online_devices))
+        .route("/sync/test", post(test_sync_connection))
+        .route("/sync/now", post(sync_now))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             admin_auth_middleware,
