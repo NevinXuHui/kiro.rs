@@ -323,7 +323,7 @@ impl TokenUsageTracker {
                 }
                 TimeGranularity::Week => {
                     // 计算周一日期作为周标识（ISO 8601）
-                    let iso_week: IsoWeek = dt.iso_week();
+                    let _iso_week: IsoWeek = dt.iso_week();
 
                     // 计算该周的周一日期
                     let days_from_monday = dt.weekday().num_days_from_monday();

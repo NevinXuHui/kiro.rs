@@ -172,10 +172,14 @@ async fn test_anthropic(state: &UserApiState) -> Json<ConnectivityTestResponse> 
     };
 
     let response = match result {
-        Ok(Ok(api_resp)) => api_resp.response,
+        Ok(Ok(api_resp)) => api_resp,
         Ok(Err(e)) => return make_error(format!("API 调用失败: {}", e)),
         Err(_) => return make_error("连接超时（30 秒）".to_string()),
     };
+
+    // 获取实际使用的模型（可能因降级而不同）
+    let actual_model = response.actual_model.as_deref().unwrap_or(test_model);
+    let response = response.response;
 
     let status = response.status();
     if !status.is_success() {
@@ -220,6 +224,16 @@ async fn test_anthropic(state: &UserApiState) -> Json<ConnectivityTestResponse> 
     } else {
         0
     };
+
+    // 记录 Token 使用量（使用实际模型名称）
+    let final_input = input_tokens.unwrap_or(0);
+    state.token_usage_tracker.record(
+        actual_model.to_string(),
+        credential_id,
+        final_input,
+        output_tokens,
+        None, // 测试请求不关联 API Key
+    );
 
     Json(ConnectivityTestResponse {
         success: true,
