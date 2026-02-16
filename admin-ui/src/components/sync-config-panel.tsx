@@ -340,20 +340,20 @@ export function SyncConfigPanel() {
               {onlineDevices.map((device) => (
                 <div
                   key={device.deviceId}
-                  className="flex items-center justify-between p-3 border rounded-lg"
+                  className="flex items-center justify-between p-3 border rounded-lg gap-4"
                 >
-                  <div className="flex items-center gap-3">
-                    <Wifi className="h-5 w-5 text-green-500" />
-                    <div>
-                      <p className="font-medium">{device.deviceName}</p>
-                      <p className="text-sm text-muted-foreground">
+                  <div className="flex items-center gap-3 min-w-0" style={{ maxWidth: '60%' }}>
+                    <Wifi className="h-5 w-5 text-green-500 flex-shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium truncate">{device.deviceName}</p>
+                      <p className="text-sm text-muted-foreground truncate" title={device.userEmail}>
                         {device.userEmail}
                       </p>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right flex-shrink-0">
                     <Badge variant="outline">{device.deviceType}</Badge>
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="text-xs text-muted-foreground mt-1 whitespace-nowrap">
                       {new Date(device.lastHeartbeat).toLocaleString()}
                     </p>
                   </div>

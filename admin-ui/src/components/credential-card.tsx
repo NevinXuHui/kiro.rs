@@ -160,25 +160,30 @@ export function CredentialCard({
       >
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
               <Checkbox
                 checked={selected}
                 onCheckedChange={onToggleSelect}
+                className="flex-shrink-0"
               />
-              <CardTitle className="text-lg flex items-center gap-2">
-                {credential.email || `凭据 #${credential.id}`}
-                {credential.isCurrent && (
-                  <Badge variant="success">当前</Badge>
-                )}
-                {credential.disabled && (
-                  <Badge variant="destructive">已禁用</Badge>
-                )}
-                {!credential.isCurrent && !credential.disabled && (
-                  <span className="text-xs text-muted-foreground font-normal">双击设为首选</span>
-                )}
+              <CardTitle className="text-lg flex items-center gap-2 min-w-0 flex-1">
+                <span className="truncate" title={credential.email || `凭据 #${credential.id}`}>
+                  {credential.email || `凭据 #${credential.id}`}
+                </span>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {credential.isCurrent && (
+                    <Badge variant="success">当前</Badge>
+                  )}
+                  {credential.disabled && (
+                    <Badge variant="destructive">已禁用</Badge>
+                  )}
+                  {!credential.isCurrent && !credential.disabled && (
+                    <span className="text-xs text-muted-foreground font-normal whitespace-nowrap">双击设为首选</span>
+                  )}
+                </div>
               </CardTitle>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <span className="text-sm text-muted-foreground">启用</span>
               <Switch
                 checked={!credential.disabled}
