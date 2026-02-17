@@ -265,13 +265,18 @@ impl SyncManager {
         let config = self.config.read().clone().context("同步配置未设置")?;
 
         // 生成设备 ID（基于主机名和时间戳）
-        let device_id = format!(
-            "{}-{}",
-            hostname::get()
-                .ok()
-                .and_then(|h| h.into_string().ok())
-                .unwrap_or_else(|| "unknown".to_string()),
-            Utc::now().timestamp()
+        let hostname = hostname::get()
+            .ok()
+            .and_then(|h| h.into_string().ok())
+            .unwrap_or_else(|| "unknown".to_string());
+
+        let device_id = format!("{}-{}", hostname, Utc::now().timestamp());
+
+        tracing::info!(
+            "准备注册设备 - device_id: {}, device_name: {}, device_type: {}",
+            device_id,
+            device_name,
+            config.device_type.as_str()
         );
 
         // 使用配置的设备类型

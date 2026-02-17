@@ -239,7 +239,13 @@ impl DeviceClient {
             register_data["accountType"] = json!(account_type);
         }
 
-        tracing::debug!("发送注册数据: {}", register_data);
+        tracing::info!(
+            "发送注册数据 - deviceId: {}, deviceName: {}, deviceType: {}",
+            device_info.device_id,
+            device_info.device_name,
+            device_info.device_type
+        );
+        tracing::debug!("完整注册数据: {}", register_data);
 
         client
             .emit("device:register", register_data)
