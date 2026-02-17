@@ -205,10 +205,11 @@ impl DeviceClient {
             .on("error", {
                 let state = state_for_update.clone();
                 move |payload, _client| {
-                    let state = state.clone();
+                    let _state = state.clone();
                     async move {
-                        tracing::error!("Socket.IO 错误: {:?}", payload);
-                        *state.write().await = ConnectionState::Error("连接错误".to_string());
+                        tracing::warn!("Socket.IO 连接错误: {:?}", payload);
+                        // 保持连接状态，让心跳机制检测并处理
+                        // 不立即设置为 Error，避免心跳循环立即停止
                     }
                     .boxed()
                 }
