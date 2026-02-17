@@ -252,9 +252,11 @@ impl DeviceClient {
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(heartbeat_interval);
-            loop {
-                interval.tick().await;
 
+            // 立即发送第一次心跳，不等待
+            interval.tick().await; // 消耗第一个立即触发的 tick
+
+            loop {
                 // 检查连接状态
                 let current_state = state_clone.read().await.clone();
                 if !matches!(current_state, ConnectionState::Registered) {
@@ -277,6 +279,9 @@ impl DeviceClient {
                 }
 
                 tracing::debug!("已发送心跳");
+
+                // 等待下一个心跳间隔
+                interval.tick().await;
             }
         });
 
