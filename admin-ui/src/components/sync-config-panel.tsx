@@ -30,6 +30,11 @@ interface OnlineDevice {
   lastHeartbeat: number
 }
 
+interface SyncStatus {
+  enabled: boolean
+  connectionState: string | null
+}
+
 export function SyncConfigPanel() {
   const [config, setConfig] = useState<SyncConfig>({
     serverUrl: 'http://localhost:3000',
@@ -44,12 +49,19 @@ export function SyncConfigPanel() {
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
   const [isSyncing, setIsSyncing] = useState(false)
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null)
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null)
 
   // 加载配置
   useEffect(() => {
     loadConfig()
     loadDeviceInfo()
     loadOnlineDevices()
+    loadSyncStatus()
+
+    // 每 5 秒自动刷新连接状态
+    const statusInterval = setInterval(loadSyncStatus, 5000)
+
+    return () => clearInterval(statusInterval)
   }, [])
 
   const loadConfig = async () => {
@@ -87,6 +99,18 @@ export function SyncConfigPanel() {
       }
     } catch (error) {
       console.error('加载在线设备失败:', error)
+    }
+  }
+
+  const loadSyncStatus = async () => {
+    try {
+      const response = await fetch('/api/admin/sync/status', { headers: { 'x-api-key': storage.getApiKey() || '' } })
+      if (response.ok) {
+        const data = await response.json()
+        setSyncStatus(data)
+      }
+    } catch (error) {
+      console.error('加载同步状态失败:', error)
     }
   }
 
@@ -159,15 +183,77 @@ export function SyncConfigPanel() {
     }
   }
 
+  const getConnectionStateDisplay = () => {
+    if (!syncStatus) return null
+
+    const state = syncStatus.connectionState
+    if (!state) {
+      return (
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <WifiOff className="h-4 w-4" />
+          <span className="text-sm">未连接</span>
+        </div>
+      )
+    }
+
+    if (state === 'registered') {
+      return (
+        <div className="flex items-center gap-2 text-green-600">
+          <Wifi className="h-4 w-4" />
+          <span className="text-sm font-medium">已连接</span>
+        </div>
+      )
+    }
+
+    if (state === 'connecting') {
+      return (
+        <div className="flex items-center gap-2 text-yellow-600">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span className="text-sm">连接中...</span>
+        </div>
+      )
+    }
+
+    if (state === 'connected') {
+      return (
+        <div className="flex items-center gap-2 text-blue-600">
+          <Wifi className="h-4 w-4" />
+          <span className="text-sm">已连接（注册中）</span>
+        </div>
+      )
+    }
+
+    if (state.startsWith('error:')) {
+      return (
+        <div className="flex items-center gap-2 text-red-600">
+          <XCircle className="h-4 w-4" />
+          <span className="text-sm">连接错误</span>
+        </div>
+      )
+    }
+
+    return (
+      <div className="flex items-center gap-2 text-muted-foreground">
+        <WifiOff className="h-4 w-4" />
+        <span className="text-sm">未连接</span>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* 同步配置 */}
       <Card>
         <CardHeader>
-          <CardTitle>同步配置</CardTitle>
-          <CardDescription>
-            配置与 kiro-token-manager 服务器的数据同步
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>同步配置</CardTitle>
+              <CardDescription>
+                配置与 kiro-token-manager 服务器的数据同步
+              </CardDescription>
+            </div>
+            {config.enabled && getConnectionStateDisplay()}
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">

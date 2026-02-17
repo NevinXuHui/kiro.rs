@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { RefreshCw, Download, Trash2 } from 'lucide-react'
+import { RefreshCw, Download, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
@@ -30,18 +30,24 @@ export function LogsPanel() {
   const [lines, setLines] = useState(200)
   const [refreshInterval, setRefreshInterval] = useState(3000)
   const [logLevel, setLogLevel] = useState('all')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(100)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalLines, setTotalLines] = useState(0)
   const logsEndRef = useRef<HTMLDivElement>(null)
   const intervalRef = useRef<number | null>(null)
 
   const fetchLogs = async () => {
     setLoading(true)
     try {
-      const response = await api.get(`/logs?lines=${lines}&level=${logLevel}`)
+      const response = await api.get(`/logs?lines=${lines}&level=${logLevel}&page=${currentPage}&pageSize=${pageSize}`)
       if (response.data.success) {
         setLogs(response.data.content)
-        // 自动滚动到底部
+        setTotalPages(response.data.totalPages || 1)
+        setTotalLines(response.data.totalLines || 0)
+        // 自动滚动到顶部
         setTimeout(() => {
-          logsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+          logsEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
         }, 100)
       } else {
         toast.error('获取日志失败')
@@ -76,8 +82,12 @@ export function LogsPanel() {
   }
 
   useEffect(() => {
+    setCurrentPage(1) // 重置到第一页
+  }, [lines, logLevel, pageSize])
+
+  useEffect(() => {
     fetchLogs()
-  }, [lines, logLevel])
+  }, [lines, logLevel, currentPage, pageSize])
 
   useEffect(() => {
     if (autoRefresh) {
@@ -178,10 +188,46 @@ export function LogsPanel() {
         </CardHeader>
         <CardContent>
           <div className="relative">
+            <div ref={logsEndRef} />
             <pre className="bg-muted rounded-lg p-4 text-xs font-mono overflow-auto max-h-[600px] whitespace-pre-wrap break-words">
               {logs || '暂无日志'}
-              <div ref={logsEndRef} />
             </pre>
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                <div className="text-sm text-muted-foreground">
+                  共 {totalLines} 行日志，第 {currentPage} / {totalPages} 页
+                </div>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={pageSize}
+                    onChange={(e) => setPageSize(Number(e.target.value))}
+                    className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
+                  >
+                    <option value={50}>50 行/页</option>
+                    <option value={100}>100 行/页</option>
+                    <option value={200}>200 行/页</option>
+                  </select>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                    disabled={currentPage === 1 || loading}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    上一页
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                    disabled={currentPage === totalPages || loading}
+                  >
+                    下一页
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

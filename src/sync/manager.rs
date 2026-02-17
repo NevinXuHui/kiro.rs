@@ -660,6 +660,26 @@ impl SyncManager {
         let result: crate::sync::types::PushCredentialResult = response.json().await?;
         Ok(result.command_id)
     }
+
+    /// 获取 WebSocket 连接状态
+    pub fn get_connection_state(&self) -> Option<String> {
+        let ws_client = self.ws_client.read();
+        if let Some(client) = ws_client.as_ref() {
+            // 使用 blocking 方式获取状态
+            let state = tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(client.get_state())
+            });
+            Some(match state {
+                crate::sync::websocket::ConnectionState::Disconnected => "disconnected".to_string(),
+                crate::sync::websocket::ConnectionState::Connecting => "connecting".to_string(),
+                crate::sync::websocket::ConnectionState::Connected => "connected".to_string(),
+                crate::sync::websocket::ConnectionState::Registered => "registered".to_string(),
+                crate::sync::websocket::ConnectionState::Error(msg) => format!("error: {}", msg),
+            })
+        } else {
+            None
+        }
+    }
 }
 
 impl Clone for SyncManager {

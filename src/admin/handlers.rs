@@ -3,7 +3,7 @@
 use axum::{
     Json,
     extract::{Path, Query, State},
-    response::IntoResponse,
+    response::{IntoResponse, Response},
 };
 
 use super::{
@@ -533,6 +533,17 @@ pub async fn get_logs(
 
     let level = params.get("level").map(|s| s.as_str()).unwrap_or("all");
 
+    // 分页参数
+    let page = params
+        .get("page")
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(1);
+
+    let page_size = params
+        .get("pageSize")
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(100);
+
     // 查找最新的日志文件
     let log_path = match std::fs::read_dir("logs") {
         Ok(entries) => {
@@ -577,10 +588,30 @@ pub async fn get_logs(
             // 根据日志级别过滤
             let filtered_content = filter_by_level(&local_content, level);
 
+            // 分页处理
+            let all_lines: Vec<&str> = filtered_content.lines().collect();
+            let total_lines = all_lines.len();
+            let total_pages = (total_lines + page_size - 1) / page_size;
+
+            let start_idx = (page - 1) * page_size;
+            let end_idx = std::cmp::min(start_idx + page_size, total_lines);
+
+            let page_lines: Vec<&str> = if start_idx < total_lines {
+                all_lines[start_idx..end_idx].to_vec()
+            } else {
+                Vec::new()
+            };
+
+            let page_content = page_lines.join("\n");
+
             Json(serde_json::json!({
                 "success": true,
-                "content": filtered_content,
-                "lines": filtered_content.lines().count()
+                "content": page_content,
+                "lines": page_lines.len(),
+                "totalLines": total_lines,
+                "page": page,
+                "pageSize": page_size,
+                "totalPages": total_pages
             }))
             .into_response()
         }
@@ -1130,4 +1161,20 @@ pub async fn sync_now(State(state): State<AdminState>) -> impl IntoResponse {
             "error": "同步管理器未初始化"
         })).into_response()
     }
+}
+
+/// GET /api/admin/sync/status
+/// 获取同步连接状态
+pub async fn get_sync_status(State(state): State<AdminState>) -> Json<serde_json::Value> {
+    let (enabled, connection_state) = if let Some(sync_manager) = &state.sync_manager {
+        let connection_state = sync_manager.get_connection_state();
+        (sync_manager.is_enabled(), connection_state)
+    } else {
+        (false, None)
+    };
+
+    Json(serde_json::json!({
+        "enabled": enabled,
+        "connectionState": connection_state
+    }))
 }

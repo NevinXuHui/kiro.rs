@@ -10,7 +10,7 @@ use super::{
         add_credential, create_api_key, delete_api_key, delete_credential,
         get_all_credentials, get_api_key_by_id,
         get_credential_balance, get_device_info, get_load_balancing_mode, get_logs,
-        get_online_devices, get_proxy_config, get_sync_config, get_token_usage,
+        get_online_devices, get_proxy_config, get_sync_config, get_sync_status, get_token_usage,
         get_token_usage_timeseries, list_api_keys,
         reset_failure_count, reset_token_usage, save_sync_config,
         set_credential_disabled, set_credential_primary, set_credential_priority,
@@ -83,6 +83,7 @@ pub fn create_admin_router(state: AdminState) -> Router {
         .route("/sync/devices", get(get_online_devices))
         .route("/sync/test", post(test_sync_connection))
         .route("/sync/now", post(sync_now))
+        .route("/sync/status", get(get_sync_status))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             admin_auth_middleware,
