@@ -1,4 +1,4 @@
-/target/*
+/target/
 /CLAUDE.md
 /AGENTS.md
 /config.json
@@ -32,13 +32,17 @@
 
 # 日志文件
 /logs/
-kiro.log
+*.log
+*.log.*
 
 # SSL 证书
 *.pem
 
 # 安装包
 *.apk
+
+# 备份文件
+*.bak
 
 # macOS
 .DS_Store
