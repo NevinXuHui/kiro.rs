@@ -3,7 +3,7 @@
 use axum::{
     Json,
     extract::{Path, Query, State},
-    response::{IntoResponse, Response},
+    response::IntoResponse,
 };
 
 use super::{
