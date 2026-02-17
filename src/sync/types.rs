@@ -143,6 +143,7 @@ pub struct SyncVersionResponse {
 
 /// 删除响应
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct DeleteResponse {
     pub message: String,
     pub current_version: u64,

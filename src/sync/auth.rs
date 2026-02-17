@@ -30,6 +30,7 @@ struct AuthResponse {
 
 /// 用户信息
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct UserInfo {
     id: u64,
     email: String,

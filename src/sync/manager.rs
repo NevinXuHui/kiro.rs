@@ -93,6 +93,7 @@ impl SyncManager {
     }
 
     /// 更新同步配置
+    #[allow(dead_code)]
     pub fn update_config(&self, config: SyncConfig) -> Result<()> {
         // 更新 HTTP 客户端
         let proxy = self.proxy_config.read().clone();
@@ -451,6 +452,7 @@ impl SyncManager {
     }
 
     /// 将 KiroCredentials 转换为 TokenSync
+    #[allow(dead_code)]
     fn convert_to_token_sync(&self, cred: &KiroCredentials) -> Option<TokenSync> {
         let device_info = self.device_info.read().clone()?;
 
@@ -475,6 +477,7 @@ impl SyncManager {
     }
 
     /// 推送本地变更到服务器
+    #[allow(dead_code)]
     pub async fn push_credential_changes(&self, _credentials: &[KiroCredentials]) -> Result<()> {
         if !self.is_enabled() {
             return Ok(());
@@ -532,6 +535,7 @@ impl SyncManager {
     }
 
     /// 获取当前同步版本
+    #[allow(dead_code)]
     pub fn get_sync_version(&self) -> u64 {
         *self.last_sync_version.read()
     }

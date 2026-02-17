@@ -284,16 +284,19 @@ impl DeviceClient {
     }
 
     /// 获取当前连接状态
+    #[allow(dead_code)]
     pub async fn get_state(&self) -> ConnectionState {
         self.state.read().await.clone()
     }
 
     /// 检查是否已连接并注册
+    #[allow(dead_code)]
     pub async fn is_registered(&self) -> bool {
         matches!(*self.state.read().await, ConnectionState::Registered)
     }
 
     /// 断开连接
+    #[allow(dead_code)]
     pub async fn disconnect(&self) -> Result<()> {
         if let Some(client) = self.client.write().await.take() {
             client.disconnect().await?;

@@ -127,6 +127,7 @@ impl SyncClient {
     }
 
     /// 删除 Token（软删除）
+    #[allow(dead_code)]
     pub async fn delete_token(&self, token_id: u64) -> Result<u64> {
         let url = format!("{}/api/sync/tokens/{}", self.server_url, token_id);
 
@@ -156,6 +157,7 @@ impl SyncClient {
     }
 
     /// 删除 Bonus（软删除）
+    #[allow(dead_code)]
     pub async fn delete_bonus(&self, bonus_id: u64) -> Result<u64> {
         let url = format!("{}/api/sync/bonuses/{}", self.server_url, bonus_id);
 
@@ -185,6 +187,7 @@ impl SyncClient {
     }
 
     /// 更新认证 Token
+    #[allow(dead_code)]
     pub fn set_auth_token(&mut self, token: Option<String>) {
         self.auth_token = token;
     }
