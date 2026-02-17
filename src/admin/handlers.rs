@@ -9,7 +9,7 @@ use axum::{
 use super::{
     middleware::AdminState,
     types::{
-        self, AddCredentialRequest, ConnectivityTestRequest, ConnectivityTestResponse,
+        AddCredentialRequest, ConnectivityTestRequest, ConnectivityTestResponse,
         CreateApiKeyRequest, CreateApiKeyResponse, ProxyConfigResponse,
         SetDisabledRequest, SetLoadBalancingModeRequest, SetPriorityRequest, SuccessResponse,
         UpdateApiKeyRequest, UpdateProxyConfigRequest,
