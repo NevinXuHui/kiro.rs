@@ -351,6 +351,7 @@ impl AdminErrorResponse {
 // ============ 设备管理 ============
 
 /// 在线设备列表响应
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OnlineDevicesResponse {
@@ -359,6 +360,7 @@ pub struct OnlineDevicesResponse {
 }
 
 /// 推送凭证响应
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PushCredentialResponse {

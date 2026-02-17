@@ -22,9 +22,11 @@ pub enum AdminServiceError {
     InvalidCredential(String),
 
     /// 设备离线
+    #[allow(dead_code)]
     DeviceOffline,
 
     /// 同步错误
+    #[allow(dead_code)]
     SyncError(String),
 }
 
