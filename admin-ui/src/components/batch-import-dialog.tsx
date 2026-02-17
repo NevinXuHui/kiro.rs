@@ -53,6 +53,16 @@ async function sha256Hex(value: string): Promise<string | null> {
   }
 }
 
+/**
+ * 生成随机的 64 位十六进制字符串（用作 machineId）
+ */
+function generateRandomMachineId(): string {
+  // 生成 32 字节（256 位）的随机数据，转换为 64 位十六进制字符串
+  const bytes = new Uint8Array(32)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
 export function BatchImportDialog({ open, onOpenChange }: BatchImportDialogProps) {
   const [jsonInput, setJsonInput] = useState('')
   const [importing, setImporting] = useState(false)
@@ -222,7 +232,7 @@ export function BatchImportDialog({ open, onOpenChange }: BatchImportDialogProps
             clientId,
             clientSecret,
             priority: cred.priority || 0,
-            machineId: cred.machineId?.trim() || undefined,
+            machineId: cred.machineId?.trim() || generateRandomMachineId(),
           })
 
           addedCredId = addedCred.credentialId
