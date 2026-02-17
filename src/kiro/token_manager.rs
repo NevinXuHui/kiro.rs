@@ -328,6 +328,7 @@ pub(crate) async fn get_usage_limits(
 }
 
 /// 获取账户信息（包含邮箱）
+#[allow(dead_code)]
 pub(crate) async fn get_account_info(
     credentials: &KiroCredentials,
     config: &Config,

@@ -558,6 +558,7 @@ impl SyncManager {
     }
 
     /// 获取在线设备列表（从服务器查询）
+    #[allow(dead_code)]
     pub async fn get_online_devices(&self) -> Result<Vec<crate::sync::types::OnlineDeviceInfo>> {
         let config = self.config.read().clone().context("同步未配置")?;
         let server_url = config.server_url;
@@ -585,12 +586,14 @@ impl SyncManager {
     }
 
     /// 检查设备是否在线
+    #[allow(dead_code)]
     pub async fn is_device_online(&self, device_id: &str) -> Result<bool> {
         let devices = self.get_online_devices().await?;
         Ok(devices.iter().any(|d| d.device_id == device_id))
     }
 
     /// 推送凭证到指定设备
+    #[allow(dead_code)]
     pub async fn push_credential_to_device(
         &self,
         device_id: &str,
@@ -624,6 +627,7 @@ impl SyncManager {
     }
 
     /// 删除设备上的凭证
+    #[allow(dead_code)]
     pub async fn delete_device_credential(
         &self,
         device_id: &str,
