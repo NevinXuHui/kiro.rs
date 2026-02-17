@@ -198,7 +198,7 @@ if [ "$SKIP_BUILD" = false ]; then
             echo -e "${GREEN}==> 构建 Rust 项目 (release 模式)...${NC}"
             cargo build --release
         else
-            echo -e "${GREEN}==> 构建 Rust 项目 (debug 模式)...${NC}"
+            echo -e "${GREEN}==> 构建 Rust 项目 (debug 模式，增量编译)...${NC}"
             cargo build
         fi
         echo -e "${GREEN}✓ Rust 项目构建完成${NC}"
