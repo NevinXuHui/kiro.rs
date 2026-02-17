@@ -175,6 +175,21 @@ impl DeviceClient {
                     .boxed()
                 }
             })
+            .on("device:heartbeat_ack", {
+                move |payload, _client| {
+                    async move {
+                        match payload {
+                            Payload::Text(values) => {
+                                if let Some(value) = values.first() {
+                                    tracing::debug!("收到心跳响应: {:?}", value);
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    .boxed()
+                }
+            })
             .on("credential:command", {
                 let token_manager = token_manager.clone();
                 let sync_manager = sync_manager.clone();
