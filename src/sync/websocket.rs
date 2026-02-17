@@ -310,6 +310,17 @@ impl DeviceClient {
         self.state.read().await.clone()
     }
 
+    /// 同步获取当前连接状态
+    pub fn get_state_sync(&self) -> ConnectionState {
+        // 使用 try_read 避免阻塞
+        if let Ok(guard) = self.state.try_read() {
+            guard.clone()
+        } else {
+            // 如果无法获取锁，返回 Disconnected
+            ConnectionState::Disconnected
+        }
+    }
+
     /// 检查是否已连接并注册
     #[allow(dead_code)]
     pub async fn is_registered(&self) -> bool {
