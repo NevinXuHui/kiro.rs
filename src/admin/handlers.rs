@@ -889,15 +889,28 @@ async fn test_anthropic_connectivity(state: &AdminState, model: Option<String>) 
 /// GET /api/admin/sync/config
 /// 获取同步配置
 pub async fn get_sync_config(State(state): State<AdminState>) -> impl IntoResponse {
+    // 从 Config 读取同步配置
+    let config = state.service.token_manager().config();
+    
     if let Some(sync_manager) = &state.sync_manager {
-        // TODO: 从 SyncManager 获取配置
+        let (server_url, auth_token, sync_interval, heartbeat_interval) = if let Some(ref sc) = config.sync_config {
+            (
+                sc.server_url.clone(),
+                sc.auth_token.clone().unwrap_or_default(),
+                sc.sync_interval,
+                sc.heartbeat_interval
+            )
+        } else {
+            (String::new(), String::new(), 300, 15)
+        };
+        
         Json(serde_json::json!({
             "config": {
-                "serverUrl": "",
-                "authToken": "",
+                "serverUrl": server_url,
+                "authToken": auth_token,
                 "enabled": sync_manager.is_enabled(),
-                "syncInterval": 300,
-                "heartbeatInterval": 15
+                "syncInterval": sync_interval,
+                "heartbeatInterval": heartbeat_interval
             }
         }))
     } else {
@@ -910,12 +923,94 @@ pub async fn get_sync_config(State(state): State<AdminState>) -> impl IntoRespon
 /// POST /api/admin/sync/config
 /// 保存同步配置
 pub async fn save_sync_config(
-    State(_state): State<AdminState>,
-    Json(_payload): Json<serde_json::Value>,
+    State(state): State<AdminState>,
+    Json(payload): Json<serde_json::Value>,
 ) -> impl IntoResponse {
-    // TODO: 实现配置保存
-    Json(SuccessResponse::new("配置保存成功"))
+    // 解析请求数据
+    let server_url = payload.get("serverUrl")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    
+    let auth_token = payload.get("authToken")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    
+    let enabled = payload.get("enabled")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    
+    let sync_interval = payload.get("syncInterval")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(300);
+    
+    let heartbeat_interval = payload.get("heartbeatInterval")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(15);
+    
+    // 获取配置文件路径
+    let config_path = state.service.token_manager().config().config_path();
+    if let Some(path) = config_path {
+        let path = path.to_path_buf();
+        match crate::model::config::Config::load(&path) {
+            Ok(mut config) => {
+                // 更新 sync_config
+                if let Some(ref mut sc) = config.sync_config {
+                    sc.server_url = server_url;
+                    sc.auth_token = auth_token;
+                    sc.enabled = enabled;
+                    sc.sync_interval = sync_interval;
+                    sc.heartbeat_interval = heartbeat_interval;
+                } else {
+                    // 如果不存在，创建新的
+                    config.sync_config = Some(crate::model::config::SyncConfig {
+                        server_url,
+                        auth_token,
+                        enabled,
+                        sync_interval,
+                        heartbeat_interval,
+                        email: None,
+                        password: None,
+                        account_type: crate::model::config::AccountType::Consumer,
+                        device_type: crate::model::config::DeviceType::Desktop,
+                    });
+                }
+                
+                // 保存配置
+                if let Err(e) = config.save() {
+                    return (
+                        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(super::types::AdminErrorResponse::internal_error(&format!(
+                            "保存配置失败: {}",
+                            e
+                        ))),
+                    )
+                        .into_response();
+                }
+                
+                tracing::info!("同步配置已保存");
+                Json(SuccessResponse::new("配置保存成功")).into_response()
+            }
+            Err(e) => (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(super::types::AdminErrorResponse::internal_error(&format!(
+                    "加载配置文件失败: {}",
+                    e
+                ))),
+            )
+                .into_response(),
+        }
+    } else {
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(super::types::AdminErrorResponse::internal_error(
+                "配置文件路径未设置",
+            )),
+        )
+            .into_response()
+    }
 }
+
 
 /// GET /api/admin/sync/device
 /// 获取当前设备信息
@@ -937,177 +1032,64 @@ pub async fn get_device_info(State(state): State<AdminState>) -> impl IntoRespon
 /// GET /api/admin/sync/devices
 /// 获取在线设备列表
 pub async fn get_online_devices(State(state): State<AdminState>) -> impl IntoResponse {
-    let sync_manager = match state.sync_manager.as_ref() {
-        Some(sm) => sm,
-        None => {
-            return (
-                axum::http::StatusCode::BAD_GATEWAY,
-                Json(types::AdminErrorResponse::api_error("同步功能未启用")),
-            )
-                .into_response()
-        }
-    };
+    // 从配置获取 Token 管理平台地址
+    let config = state.service.token_manager().config();
 
-    // 从 SyncManager 获取在线设备列表
-    match sync_manager.get_online_devices().await {
-        Ok(devices) => Json(types::OnlineDevicesResponse {
-            count: devices.len(),
-            devices,
-        })
-        .into_response(),
-        Err(e) => (
-            axum::http::StatusCode::BAD_GATEWAY,
-            Json(types::AdminErrorResponse::api_error(format!(
-                "获取设备列表失败: {}",
-                e
-            ))),
-        )
-            .into_response(),
+    if let Some(ref sync_config) = config.sync_config {
+        if !sync_config.enabled {
+            return Json(serde_json::json!({
+                "devices": []
+            }));
+        }
+
+        let server_url = &sync_config.server_url;
+        let auth_token = sync_config.auth_token.as_ref();
+
+        if server_url.is_empty() || auth_token.is_none() {
+            return Json(serde_json::json!({
+                "devices": []
+            }));
+        }
+
+        // 调用 Token 管理平台 API
+        let url = format!("{}/api/devices", server_url);
+        let client = reqwest::Client::new();
+
+        match client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", auth_token.unwrap()))
+            .timeout(std::time::Duration::from_secs(5))
+            .send()
+            .await
+        {
+            Ok(response) => {
+                if response.status().is_success() {
+                    match response.json::<serde_json::Value>().await {
+                        Ok(data) => {
+                            // 提取 devices 数组
+                            if let Some(devices) = data.get("devices") {
+                                return Json(serde_json::json!({
+                                    "devices": devices
+                                }));
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!("解析在线设备响应失败: {}", e);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!("获取在线设备失败: {}", e);
+            }
+        }
     }
+
+    Json(serde_json::json!({
+        "devices": []
+    }))
 }
 
-/// POST /api/admin/devices/:device_id/credentials
-/// 推送凭证到指定设备
-pub async fn push_credential_to_device(
-    State(state): State<AdminState>,
-    Path(device_id): Path<String>,
-    Json(req): Json<types::AddCredentialRequest>,
-) -> impl IntoResponse {
-    let sync_manager = match state.sync_manager.as_ref() {
-        Some(sm) => sm,
-        None => {
-            return (
-                axum::http::StatusCode::BAD_GATEWAY,
-                Json(types::AdminErrorResponse::api_error("同步功能未启用")),
-            )
-                .into_response()
-        }
-    };
-
-    // 1. 验证设备在线
-    let is_online = match sync_manager.is_device_online(&device_id).await {
-        Ok(online) => online,
-        Err(e) => {
-            return (
-                axum::http::StatusCode::BAD_GATEWAY,
-                Json(types::AdminErrorResponse::api_error(format!(
-                    "检查设备状态失败: {}",
-                    e
-                ))),
-            )
-                .into_response()
-        }
-    };
-
-    if !is_online {
-        return (
-            axum::http::StatusCode::NOT_FOUND,
-            Json(types::AdminErrorResponse::not_found("设备不在线")),
-        )
-            .into_response();
-    }
-
-    // 2. 构建凭证对象
-    let credential = crate::kiro::model::credentials::KiroCredentials {
-        refresh_token: Some(req.refresh_token),
-        auth_method: Some(req.auth_method),
-        client_id: req.client_id,
-        client_secret: req.client_secret,
-        priority: req.priority,
-        region: req.region,
-        auth_region: req.auth_region,
-        api_region: req.api_region,
-        machine_id: req.machine_id,
-        email: req.email,
-        proxy_url: req.proxy_url,
-        proxy_username: req.proxy_username,
-        proxy_password: req.proxy_password,
-        ..Default::default()
-    };
-
-    // 3. 通过服务器 API 推送凭证
-    match sync_manager
-        .push_credential_to_device(&device_id, credential)
-        .await
-    {
-        Ok(command_id) => Json(types::PushCredentialResponse {
-            success: true,
-            command_id,
-            message: "凭证推送请求已发送".to_string(),
-        })
-        .into_response(),
-        Err(e) => (
-            axum::http::StatusCode::BAD_GATEWAY,
-            Json(types::AdminErrorResponse::api_error(format!(
-                "推送凭证失败: {}",
-                e
-            ))),
-        )
-            .into_response(),
-    }
-}
-
-/// DELETE /api/admin/devices/:device_id/credentials/:credential_id
-/// 删除设备上的凭证
-pub async fn delete_device_credential(
-    State(state): State<AdminState>,
-    Path((device_id, credential_id)): Path<(String, u64)>,
-) -> impl IntoResponse {
-    let sync_manager = match state.sync_manager.as_ref() {
-        Some(sm) => sm,
-        None => {
-            return (
-                axum::http::StatusCode::BAD_GATEWAY,
-                Json(types::AdminErrorResponse::api_error("同步功能未启用")),
-            )
-                .into_response()
-        }
-    };
-
-    // 1. 验证设备在线
-    let is_online = match sync_manager.is_device_online(&device_id).await {
-        Ok(online) => online,
-        Err(e) => {
-            return (
-                axum::http::StatusCode::BAD_GATEWAY,
-                Json(types::AdminErrorResponse::api_error(format!(
-                    "检查设备状态失败: {}",
-                    e
-                ))),
-            )
-                .into_response()
-        }
-    };
-
-    if !is_online {
-        return (
-            axum::http::StatusCode::NOT_FOUND,
-            Json(types::AdminErrorResponse::not_found("设备不在线")),
-        )
-            .into_response();
-    }
-
-    // 2. 通过服务器 API 删除凭证
-    match sync_manager
-        .delete_device_credential(&device_id, credential_id)
-        .await
-    {
-        Ok(command_id) => Json(types::PushCredentialResponse {
-            success: true,
-            command_id,
-            message: "删除凭证请求已发送".to_string(),
-        })
-        .into_response(),
-        Err(e) => (
-            axum::http::StatusCode::BAD_GATEWAY,
-            Json(types::AdminErrorResponse::api_error(format!(
-                "删除凭证失败: {}",
-                e
-            ))),
-        )
-            .into_response(),
-    }
-}
 
 /// POST /api/admin/sync/test
 /// 测试同步连接

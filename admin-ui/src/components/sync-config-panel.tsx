@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { storage } from '@/lib/storage'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
@@ -53,7 +54,7 @@ export function SyncConfigPanel() {
 
   const loadConfig = async () => {
     try {
-      const response = await fetch('/api/admin/sync/config')
+      const response = await fetch('/api/admin/sync/config', { headers: { 'x-api-key': storage.getApiKey() || '' } })
       if (response.ok) {
         const data = await response.json()
         if (data.config) {
@@ -67,7 +68,7 @@ export function SyncConfigPanel() {
 
   const loadDeviceInfo = async () => {
     try {
-      const response = await fetch('/api/admin/sync/device')
+      const response = await fetch('/api/admin/sync/device', { headers: { 'x-api-key': storage.getApiKey() || '' } })
       if (response.ok) {
         const data = await response.json()
         setDeviceInfo(data.device)
@@ -79,7 +80,7 @@ export function SyncConfigPanel() {
 
   const loadOnlineDevices = async () => {
     try {
-      const response = await fetch('/api/admin/sync/devices')
+      const response = await fetch('/api/admin/sync/devices', { headers: { 'x-api-key': storage.getApiKey() || '' } })
       if (response.ok) {
         const data = await response.json()
         setOnlineDevices(data.devices || [])
@@ -93,7 +94,7 @@ export function SyncConfigPanel() {
     try {
       const response = await fetch('/api/admin/sync/config', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-api-key': storage.getApiKey() || '' },
         body: JSON.stringify(config),
       })
 
@@ -116,7 +117,7 @@ export function SyncConfigPanel() {
     try {
       const response = await fetch('/api/admin/sync/test', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-api-key': storage.getApiKey() || '' },
         body: JSON.stringify(config),
       })
 
@@ -140,6 +141,7 @@ export function SyncConfigPanel() {
     try {
       const response = await fetch('/api/admin/sync/now', {
         method: 'POST',
+        headers: { 'x-api-key': storage.getApiKey() || '' },
       })
 
       if (response.ok) {
