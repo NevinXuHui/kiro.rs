@@ -5,6 +5,7 @@
 use serde::Deserialize;
 
 /// 账户信息查询响应
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AccountResponse {

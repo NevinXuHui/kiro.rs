@@ -195,6 +195,7 @@ pub struct OnlineDeviceInfo {
 }
 
 /// 设备列表响应
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct DevicesResponse {
     pub devices: Vec<OnlineDeviceInfo>,
@@ -202,6 +203,7 @@ pub struct DevicesResponse {
 }
 
 /// 推送凭证结果
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct PushCredentialResult {
     pub success: bool,
