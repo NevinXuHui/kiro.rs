@@ -475,6 +475,12 @@ impl SyncManager {
                                 Err(e) => {
                                     let error_msg = e.to_string();
 
+                                    // 检测是否是速率限制错误
+                                    if error_msg.contains("429") || error_msg.contains("Too Many Requests") {
+                                        tracing::warn!("触发速率限制，跳过本次推送: {}", error_msg);
+                                        continue;
+                                    }
+
                                     // 检测是否是认证相关错误
                                     let is_auth_error = error_msg.contains("401")
                                         || error_msg.contains("403")
