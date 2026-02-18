@@ -71,6 +71,7 @@ pub struct DeviceClient {
     state: Arc<RwLock<ConnectionState>>,
     heartbeat_interval: Duration,
     client: Arc<RwLock<Option<Client>>>,
+    reconnect_enabled: Arc<RwLock<bool>>,
 }
 
 impl DeviceClient {
@@ -82,6 +83,7 @@ impl DeviceClient {
             state: Arc::new(RwLock::new(ConnectionState::Disconnected)),
             heartbeat_interval,
             client: Arc::new(RwLock::new(None)),
+            reconnect_enabled: Arc::new(RwLock::new(true)),
         }
     }
 
@@ -274,6 +276,8 @@ impl DeviceClient {
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(heartbeat_interval);
+            let mut consecutive_failures = 0;
+            const MAX_FAILURES: u32 = 3;
 
             // 立即发送第一次心跳，不等待
             interval.tick().await; // 消耗第一个立即触发的 tick
@@ -296,11 +300,17 @@ impl DeviceClient {
                     .await
                 {
                     tracing::error!("发送心跳失败: {}", e);
-                    *state_clone.write().await = ConnectionState::Error(e.to_string());
-                    break;
-                }
+                    consecutive_failures += 1;
 
-                tracing::debug!("已发送心跳");
+                    if consecutive_failures >= MAX_FAILURES {
+                        tracing::warn!("连续心跳失败 {} 次，标记为需要重连", MAX_FAILURES);
+                        *state_clone.write().await = ConnectionState::Error(format!("心跳失败: {}", e));
+                        break;
+                    }
+                } else {
+                    tracing::debug!("已发送心跳");
+                    consecutive_failures = 0;
+                }
 
                 // 等待下一个心跳间隔
                 interval.tick().await;
@@ -336,6 +346,9 @@ impl DeviceClient {
     /// 断开连接
     #[allow(dead_code)]
     pub async fn disconnect(&self) -> Result<()> {
+        // 禁用重连
+        *self.reconnect_enabled.write().await = false;
+
         if let Some(client) = self.client.write().await.take() {
             client.disconnect().await?;
             *self.state.write().await = ConnectionState::Disconnected;

@@ -310,11 +310,38 @@ impl SyncManager {
         let last_sync_version = self.last_sync_version.clone();
         let credentials = self.credentials.clone();
         let device_info_for_sync = self.device_info.clone();
+        let ws_client_for_reconnect = self.ws_client.clone();
+        let token_manager_for_reconnect = token_manager.clone();
+        let self_for_reconnect = self.clone();
 
         tokio::spawn(async move {
             let mut interval = time::interval(sync_interval);
             loop {
                 interval.tick().await;
+
+                // 检查 WebSocket 连接状态并尝试重连
+                let (ws_client_opt, device_info_opt) = {
+                    let ws_client = ws_client_for_reconnect.read().as_ref().cloned();
+                    let device_info = device_info_for_sync.read().clone();
+                    (ws_client, device_info)
+                };
+
+                if let (Some(ws_client), Some(device_info)) = (ws_client_opt, device_info_opt) {
+                    let state = ws_client.get_state_sync();
+                    if matches!(state, crate::sync::websocket::ConnectionState::Error(_))
+                        || matches!(state, crate::sync::websocket::ConnectionState::Disconnected) {
+                        tracing::info!("检测到 WebSocket 断开，尝试重连...");
+
+                        match ws_client.connect_and_register(
+                            device_info,
+                            token_manager_for_reconnect.clone(),
+                            self_for_reconnect.clone(),
+                        ).await {
+                            Ok(_) => tracing::info!("WebSocket 重连成功"),
+                            Err(e) => tracing::warn!("WebSocket 重连失败: {}", e),
+                        }
+                    }
+                }
 
                 let client = {
                     let guard = http_client.read();
