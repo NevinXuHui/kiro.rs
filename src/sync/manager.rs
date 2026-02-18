@@ -72,9 +72,9 @@ impl SyncManager {
         // 创建共享的 device_info
         let device_info = Arc::new(RwLock::new(None));
 
-        // 如果配置了同步，创建 WebSocket 客户端（暂时不传递 notifier，稍后在 start 中设置）
+        // 如果配置了同步，创建 WebSocket 客户端（暂时不传递 notifier 和 command_sender，稍后在 start 中设置）
         let ws_client = if let Some(ref cfg) = sync_config {
-            Some(SocketIOClient::new(cfg.server_url.clone(), device_info.clone(), None))
+            Some(SocketIOClient::new(cfg.server_url.clone(), device_info.clone(), None, None))
         } else {
             None
         };
@@ -106,7 +106,7 @@ impl SyncManager {
         *self.http_client.write() = Some(http_client);
 
         // 更新 WebSocket 客户端
-        let ws_client = SocketIOClient::new(config.server_url.clone(), self.device_info.clone(), None);
+        let ws_client = SocketIOClient::new(config.server_url.clone(), self.device_info.clone(), None, None);
         *self.ws_client.write() = Some(ws_client);
 
         *self.config.write() = Some(config);
@@ -312,13 +312,27 @@ impl SyncManager {
         // 创建一个通道，用于在 WebSocket 注册成功后立即触发推送
         let (registration_tx, registration_rx) = tokio::sync::mpsc::channel::<()>(1);
 
-        // 重新创建带有 notifier 的 WebSocket 客户端
+        // 创建命令通道，用于接收服务器推送的凭据命令
+        let (command_tx, mut command_rx) = tokio::sync::mpsc::unbounded_channel::<crate::sync::types::DeviceCommand>();
+
+        // 重新创建带有 notifier 和 command_sender 的 WebSocket 客户端
         let ws_client_with_notifier = SocketIOClient::new(
             config.server_url.clone(),
             self.device_info.clone(),
             Some(registration_tx),
+            Some(command_tx),
         );
         *self.ws_client.write() = Some(ws_client_with_notifier.clone());
+
+        // 启动命令处理任务
+        let sync_manager_for_commands = self.clone();
+        tokio::spawn(async move {
+            while let Some(command) = command_rx.recv().await {
+                if let Err(e) = sync_manager_for_commands.handle_device_command(command).await {
+                    tracing::error!("处理设备命令失败: {}", e);
+                }
+            }
+        });
 
         // 启动 WebSocket 自动重连
         tracing::info!("启动 WebSocket 自动重连任务");
@@ -783,6 +797,68 @@ impl SyncManager {
             })
         } else {
             None
+        }
+    }
+
+    /// 处理服务器推送的设备命令
+    async fn handle_device_command(&self, command: crate::sync::types::DeviceCommand) -> Result<()> {
+        use crate::sync::types::DeviceCommand;
+
+        match command {
+            DeviceCommand::AddCredential { credential, command_id } => {
+                tracing::info!("收到添加凭据命令: email={:?}, command_id={}", credential.email, command_id);
+
+                // 将 ServerCredential 转换为 KiroCredentials
+                let kiro_cred = crate::kiro::model::credentials::KiroCredentials {
+                    id: None,
+                    access_token: None,
+                    refresh_token: Some(credential.refresh_token),
+                    profile_arn: None,
+                    expires_at: None,
+                    auth_method: Some(credential.auth_method),
+                    client_id: Some(credential.client_id),
+                    client_secret: Some(credential.client_secret),
+                    priority: credential.priority,
+                    region: credential.region,
+                    auth_region: None,
+                    api_region: None,
+                    machine_id: None,
+                    email: credential.email,
+                    subscription_title: None,
+                    proxy_url: None,
+                    proxy_username: None,
+                    proxy_password: None,
+                    disabled: false,
+                    disabled_reason: None,
+                    sync_version: 0,
+                    last_modified_at: None,
+                    device_id: None,
+                    device_name: None,
+                    device_type: None,
+                    last_sync_at: None,
+                };
+
+                // 添加到本地凭据列表
+                let mut creds = self.credentials.write();
+                creds.push(kiro_cred.clone());
+                drop(creds);
+
+                tracing::info!("凭据已添加到内存，email={:?}", kiro_cred.email);
+
+                // TODO: 保存到配置文件（需要通过 token_manager 或其他方式）
+
+                Ok(())
+            }
+            DeviceCommand::DeleteCredential { credential_id, command_id } => {
+                tracing::info!("收到删除凭据命令: id={}, command_id={}", credential_id, command_id);
+                // TODO: 实现删除逻辑
+                Ok(())
+            }
+            DeviceCommand::SetDisabled { credential_id, disabled, command_id } => {
+                tracing::info!("收到设置禁用状态命令: id={}, disabled={}, command_id={}", credential_id, disabled, command_id);
+                // TODO: 实现禁用/启用逻辑
+                Ok(())
+            }
         }
     }
 }

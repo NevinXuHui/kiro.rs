@@ -152,12 +152,28 @@ pub struct DeleteResponse {
     pub current_version: u64,
 }
 
+/// 服务器推送的凭据数据（简化格式）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerCredential {
+    pub refresh_token: String,
+    pub auth_method: String,
+    pub client_id: String,
+    pub client_secret: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub region: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+    #[serde(default)]
+    pub priority: u32,
+}
+
 /// 设备命令（服务器推送到客户端）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DeviceCommand {
     AddCredential {
-        credential: crate::kiro::model::credentials::KiroCredentials,
+        credential: ServerCredential,
         command_id: String,
     },
     DeleteCredential {

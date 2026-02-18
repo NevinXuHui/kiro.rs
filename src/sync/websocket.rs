@@ -420,7 +420,38 @@ impl DeviceClient {
                 command_id,
             } => {
                 tracing::info!("收到添加凭证命令: {}", command_id);
-                match token_manager.add_credential(credential).await {
+
+                // 将 ServerCredential 转换为 KiroCredentials
+                let kiro_cred = crate::kiro::model::credentials::KiroCredentials {
+                    id: None,
+                    access_token: None,
+                    refresh_token: Some(credential.refresh_token),
+                    profile_arn: None,
+                    expires_at: None,
+                    auth_method: Some(credential.auth_method),
+                    client_id: Some(credential.client_id),
+                    client_secret: Some(credential.client_secret),
+                    priority: credential.priority,
+                    region: credential.region,
+                    auth_region: None,
+                    api_region: None,
+                    machine_id: None,
+                    email: credential.email,
+                    subscription_title: None,
+                    proxy_url: None,
+                    proxy_username: None,
+                    proxy_password: None,
+                    disabled: false,
+                    disabled_reason: None,
+                    sync_version: 0,
+                    last_modified_at: None,
+                    device_id: None,
+                    device_name: None,
+                    device_type: None,
+                    last_sync_at: None,
+                };
+
+                match token_manager.add_credential(kiro_cred).await {
                     Ok(id) => {
                         tracing::info!("凭证添加成功，ID: {}", id);
 

@@ -40,6 +40,7 @@ pub struct SocketIOClient {
     state: Arc<RwLock<ConnectionState>>,
     device_info: Arc<RwLock<Option<DeviceInfo>>>,
     registration_notifier: Option<tokio::sync::mpsc::Sender<()>>,
+    command_sender: Option<tokio::sync::mpsc::UnboundedSender<crate::sync::types::DeviceCommand>>,
 }
 
 impl SocketIOClient {
@@ -47,12 +48,14 @@ impl SocketIOClient {
         server_url: String,
         device_info: Arc<RwLock<Option<DeviceInfo>>>,
         registration_notifier: Option<tokio::sync::mpsc::Sender<()>>,
+        command_sender: Option<tokio::sync::mpsc::UnboundedSender<crate::sync::types::DeviceCommand>>,
     ) -> Self {
         Self {
             server_url,
             state: Arc::new(RwLock::new(ConnectionState::Disconnected)),
             device_info,
             registration_notifier,
+            command_sender,
         }
     }
 
@@ -62,6 +65,7 @@ impl SocketIOClient {
         let server_url = self.server_url.clone();
         let device_info = self.device_info.clone();
         let registration_notifier = self.registration_notifier.clone();
+        let command_sender = self.command_sender.clone();
 
         tokio::spawn(async move {
             let mut retry_delay = Duration::from_secs(1);
@@ -86,7 +90,7 @@ impl SocketIOClient {
                     }
                 };
 
-                match Self::connect_once(&server_url, &current_device_info, state.clone(), registration_notifier.clone(), first_registration).await {
+                match Self::connect_once(&server_url, &current_device_info, state.clone(), registration_notifier.clone(), first_registration, command_sender.clone()).await {
                     Ok(_) => {
                         // 连接断开了，重置重试延迟和首次注册标志
                         tracing::info!("连接已断开，准备重连");
@@ -115,6 +119,7 @@ impl SocketIOClient {
         state: Arc<RwLock<ConnectionState>>,
         registration_notifier: Option<tokio::sync::mpsc::Sender<()>>,
         is_first_registration: bool,
+        command_sender: Option<tokio::sync::mpsc::UnboundedSender<crate::sync::types::DeviceCommand>>,
     ) -> Result<()> {
         *state.write() = ConnectionState::Connecting;
 
@@ -284,6 +289,33 @@ impl SocketIOClient {
                                     break;
                                 }
                             }
+
+                            // 处理 Socket.IO 事件消息 (42)
+                            if msg.starts_with("42") {
+                                let json_str = &msg[2..];
+                                if let Ok(arr) = serde_json::from_str::<serde_json::Value>(json_str) {
+                                    if let Some(event_name) = arr.get(0).and_then(|v| v.as_str()) {
+                                        // 处理凭据命令
+                                        if event_name == "credential:command" {
+                                            if let Some(command_data) = arr.get(1) {
+                                                match serde_json::from_value::<crate::sync::types::DeviceCommand>(command_data.clone()) {
+                                                    Ok(command) => {
+                                                        tracing::info!("收到凭据命令: {:?}", command);
+                                                        if let Some(ref sender) = command_sender {
+                                                            if let Err(e) = sender.send(command) {
+                                                                tracing::error!("发送命令到处理器失败: {}", e);
+                                                            }
+                                                        }
+                                                    }
+                                                    Err(e) => {
+                                                        tracing::error!("解析凭据命令失败: {}", e);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                         Ok(Message::Close(_)) => {
                             tracing::info!("WebSocket 连接关闭");
@@ -307,7 +339,7 @@ impl SocketIOClient {
 
     /// 连接并注册设备（兼容旧接口）
     pub async fn connect_and_register(&self, device_info: DeviceInfo) -> Result<()> {
-        Self::connect_once(&self.server_url, &device_info, self.state.clone(), None, false).await
+        Self::connect_once(&self.server_url, &device_info, self.state.clone(), None, false, None).await
     }
 
     pub fn get_state(&self) -> ConnectionState {
