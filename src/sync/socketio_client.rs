@@ -38,33 +38,60 @@ pub struct DeviceInfo {
 pub struct SocketIOClient {
     server_url: String,
     state: Arc<RwLock<ConnectionState>>,
+    device_info: Arc<RwLock<Option<DeviceInfo>>>,
+    registration_notifier: Option<tokio::sync::mpsc::Sender<()>>,
 }
 
 impl SocketIOClient {
-    pub fn new(server_url: String) -> Self {
+    pub fn new(
+        server_url: String,
+        device_info: Arc<RwLock<Option<DeviceInfo>>>,
+        registration_notifier: Option<tokio::sync::mpsc::Sender<()>>,
+    ) -> Self {
         Self {
             server_url,
             state: Arc::new(RwLock::new(ConnectionState::Disconnected)),
+            device_info,
+            registration_notifier,
         }
     }
 
     /// 连接并注册设备（带自动重连）
-    pub async fn connect_and_register_with_retry(&self, device_info: DeviceInfo) {
+    pub async fn connect_and_register_with_retry(&self) {
         let state = self.state.clone();
         let server_url = self.server_url.clone();
-        
+        let device_info = self.device_info.clone();
+        let registration_notifier = self.registration_notifier.clone();
+
         tokio::spawn(async move {
             let mut retry_delay = Duration::from_secs(1);
             let max_retry_delay = Duration::from_secs(30);
-            
+            let mut first_registration = true;
+
             loop {
                 tracing::info!("尝试连接 Socket.IO 服务器...");
-                
-                match Self::connect_once(&server_url, &device_info, state.clone()).await {
+
+                // 每次重连时读取最新的 device_info（在 await 之前释放锁）
+                let current_device_info = {
+                    let guard = device_info.read();
+                    guard.as_ref().cloned()
+                };
+
+                let current_device_info = match current_device_info {
+                    Some(info) => info,
+                    None => {
+                        tracing::warn!("设备信息未设置，等待后重试");
+                        tokio::time::sleep(retry_delay).await;
+                        continue;
+                    }
+                };
+
+                match Self::connect_once(&server_url, &current_device_info, state.clone(), registration_notifier.clone(), first_registration).await {
                     Ok(_) => {
-                        // 连接断开了，重置重试延迟
+                        // 连接断开了，重置重试延迟和首次注册标志
                         tracing::info!("连接已断开，准备重连");
                         retry_delay = Duration::from_secs(1);
+                        first_registration = false;
                     }
                     Err(e) => {
                         tracing::warn!("连接失败: {}，{}秒后重试", e, retry_delay.as_secs());
@@ -86,6 +113,8 @@ impl SocketIOClient {
         server_url: &str,
         device_info: &DeviceInfo,
         state: Arc<RwLock<ConnectionState>>,
+        registration_notifier: Option<tokio::sync::mpsc::Sender<()>>,
+        is_first_registration: bool,
     ) -> Result<()> {
         *state.write() = ConnectionState::Connecting;
 
@@ -181,6 +210,15 @@ impl SocketIOClient {
                                     tracing::info!("设备注册成功");
                                     *state.write() = ConnectionState::Registered;
                                     registered = true;
+
+                                    // 首次注册成功，通知 SyncManager 立即推送
+                                    if is_first_registration {
+                                        if let Some(ref notifier) = registration_notifier {
+                                            let _ = notifier.send(()).await;
+                                            tracing::debug!("已通知 SyncManager 执行首次推送");
+                                        }
+                                    }
+
                                     break;
                                 } else if event_name == "device:error" {
                                     let error_msg = arr.get(1)
@@ -269,7 +307,7 @@ impl SocketIOClient {
 
     /// 连接并注册设备（兼容旧接口）
     pub async fn connect_and_register(&self, device_info: DeviceInfo) -> Result<()> {
-        Self::connect_once(&self.server_url, &device_info, self.state.clone()).await
+        Self::connect_once(&self.server_url, &device_info, self.state.clone(), None, false).await
     }
 
     pub fn get_state(&self) -> ConnectionState {

@@ -60,6 +60,9 @@ pub struct TokenSync {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expires_at: Option<String>,
     pub sync_version: u64,
+    // 忽略服务器返回的其他字段（如 user_id, created_at, updated_at 等）
+    #[serde(flatten, skip_serializing, default)]
+    pub _extra: std::collections::HashMap<String, serde_json::Value>,
 }
 
 /// Token 使用量同步数据

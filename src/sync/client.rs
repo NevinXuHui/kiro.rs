@@ -60,10 +60,12 @@ impl SyncClient {
             anyhow::bail!("获取变更失败: HTTP {} - {}", status, error_text);
         }
 
-        let changes = response
-            .json::<SyncChangesResponse>()
-            .await
-            .context("解析变更响应失败")?;
+        // 先获取响应文本用于调试
+        let response_text = response.text().await.context("读取响应文本失败")?;
+        tracing::debug!("服务器返回的 JSON: {}", response_text);
+
+        let changes = serde_json::from_str::<SyncChangesResponse>(&response_text)
+            .with_context(|| format!("解析变更响应失败，原始响应: {}", response_text))?;
 
         Ok(changes)
     }

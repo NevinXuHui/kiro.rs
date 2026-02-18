@@ -69,9 +69,12 @@ impl SyncManager {
             None
         };
 
-        // 如果配置了同步，创建 WebSocket 客户端
+        // 创建共享的 device_info
+        let device_info = Arc::new(RwLock::new(None));
+
+        // 如果配置了同步，创建 WebSocket 客户端（暂时不传递 notifier，稍后在 start 中设置）
         let ws_client = if let Some(ref cfg) = sync_config {
-            Some(SocketIOClient::new(cfg.server_url.clone()))
+            Some(SocketIOClient::new(cfg.server_url.clone(), device_info.clone(), None))
         } else {
             None
         };
@@ -81,7 +84,7 @@ impl SyncManager {
             ws_client: Arc::new(RwLock::new(ws_client)),
             config: Arc::new(RwLock::new(sync_config)),
             last_sync_version: Arc::new(RwLock::new(0)),
-            device_info: Arc::new(RwLock::new(None)),
+            device_info,
             config_path: Arc::new(RwLock::new(config.config_path().map(|p| p.to_path_buf()))),
             credentials: Arc::new(RwLock::new(Vec::new())),
             proxy_config: Arc::new(RwLock::new(proxy_config)),
@@ -103,7 +106,7 @@ impl SyncManager {
         *self.http_client.write() = Some(http_client);
 
         // 更新 WebSocket 客户端
-        let ws_client = SocketIOClient::new(config.server_url.clone());
+        let ws_client = SocketIOClient::new(config.server_url.clone(), self.device_info.clone(), None);
         *self.ws_client.write() = Some(ws_client);
 
         *self.config.write() = Some(config);
@@ -121,8 +124,25 @@ impl SyncManager {
 
     /// 自动认证并获取 token
     async fn ensure_authenticated(&self) -> Result<String> {
-        // 先检查是否已有 token
+        self.ensure_authenticated_internal(false).await
+    }
+
+    /// 强制重新认证（清除旧 token）
+    async fn force_reauthenticate(&self) -> Result<String> {
+        // 清除旧 token
         {
+            let mut config = self.config.write();
+            if let Some(cfg) = config.as_mut() {
+                cfg.auth_token = None;
+            }
+        }
+        self.ensure_authenticated_internal(true).await
+    }
+
+    /// 内部认证方法
+    async fn ensure_authenticated_internal(&self, force: bool) -> Result<String> {
+        // 先检查是否已有 token（除非强制重新认证）
+        if !force {
             let config = self.config.read();
             if let Some(cfg) = config.as_ref() {
                 if let Some(token) = &cfg.auth_token {
@@ -289,12 +309,20 @@ impl SyncManager {
 
         tracing::info!("账号类型: {}, 设备类型: {}", account_type, device_type);
 
+        // 创建一个通道，用于在 WebSocket 注册成功后立即触发推送
+        let (registration_tx, registration_rx) = tokio::sync::mpsc::channel::<()>(1);
+
+        // 重新创建带有 notifier 的 WebSocket 客户端
+        let ws_client_with_notifier = SocketIOClient::new(
+            config.server_url.clone(),
+            self.device_info.clone(),
+            Some(registration_tx),
+        );
+        *self.ws_client.write() = Some(ws_client_with_notifier.clone());
+
         // 启动 WebSocket 自动重连
-        let ws_client = self.ws_client.read().as_ref().cloned();
-        if let Some(client) = ws_client {
-            tracing::info!("启动 WebSocket 自动重连任务");
-            client.connect_and_register_with_retry(device_info.clone()).await;
-        }
+        tracing::info!("启动 WebSocket 自动重连任务");
+        ws_client_with_notifier.connect_and_register_with_retry().await;
 
         // 启动定期同步任务
         let sync_interval = Duration::from_secs(config.sync_interval);
@@ -302,11 +330,24 @@ impl SyncManager {
         let last_sync_version = self.last_sync_version.clone();
         let credentials = self.credentials.clone();
         let device_info_for_sync = self.device_info.clone();
+        let sync_manager = self.clone(); // 克隆 SyncManager 以便在 spawn 中使用
 
         tokio::spawn(async move {
             let mut interval = time::interval(sync_interval);
+            let mut registration_rx = registration_rx;
+            // 第一次 tick 会立即返回，我们跳过它，等待 WebSocket 注册或定时触发
+            interval.tick().await;
+
             loop {
-                interval.tick().await;
+                tokio::select! {
+                    _ = interval.tick() => {
+                        // 定时触发
+                    }
+                    _ = registration_rx.recv() => {
+                        // WebSocket 注册成功，立即触发
+                        tracing::info!("WebSocket 注册成功，立即执行首次推送");
+                    }
+                }
 
                 let client = {
                     let guard = http_client.read();
@@ -337,6 +378,21 @@ impl SyncManager {
                 // 2. 推送本地凭据数据
                 let creds = credentials.read().clone();
                 if !creds.is_empty() {
+                    // 检查 WebSocket 是否已注册
+                    let ws_registered = {
+                        let ws_client = sync_manager.ws_client.read();
+                        if let Some(client) = ws_client.as_ref() {
+                            matches!(client.get_state(), crate::sync::socketio_client::ConnectionState::Registered)
+                        } else {
+                            false
+                        }
+                    };
+
+                    if !ws_registered {
+                        tracing::debug!("WebSocket 未注册，跳过凭据数据上报");
+                        continue;
+                    }
+
                     let device_info_opt = device_info_for_sync.read().clone();
                     if let Some(device_info) = device_info_opt {
                         // 转换为 TokenSync 格式
@@ -361,6 +417,7 @@ impl SyncManager {
                                     auth_method: cred.auth_method.clone(),
                                     expires_at: cred.expires_at.clone(),
                                     sync_version: *last_sync_version.read(),
+                                    _extra: std::collections::HashMap::new(),
                                 })
                             })
                             .collect();
@@ -383,9 +440,9 @@ impl SyncManager {
 
                             let push_request = PushChangesRequest {
                                 tokens: Some(tokens.clone()),
-                                token_usage: None,
-                                token_subscriptions: None,
-                                token_bonuses: None,
+                                token_usage: Some(vec![]),
+                                token_subscriptions: Some(vec![]),
+                                token_bonuses: Some(vec![]),
                             };
 
                             match client.push_changes(push_request).await {
@@ -402,7 +459,60 @@ impl SyncManager {
                                     }
                                 }
                                 Err(e) => {
-                                    tracing::debug!("凭据数据上报失败（服务器可能未运行）: {}", e);
+                                    let error_msg = e.to_string();
+
+                                    // 检测是否是认证相关错误
+                                    let is_auth_error = error_msg.contains("401")
+                                        || error_msg.contains("403")
+                                        || error_msg.contains("FOREIGN KEY constraint failed")
+                                        || error_msg.contains("Invalid token");
+
+                                    if is_auth_error {
+                                        tracing::warn!("检测到认证失败，尝试重新认证: {}", error_msg);
+
+                                        // 克隆必要的引用
+                                        let manager = sync_manager.clone();
+
+                                        // 尝试重新认证
+                                        tokio::spawn(async move {
+                                            match manager.force_reauthenticate().await {
+                                                Ok(new_token) => {
+                                                    tracing::info!("重新认证成功，已获取新 token");
+
+                                                    // 更新 HTTP 客户端
+                                                    let proxy = manager.proxy_config.read().clone();
+                                                    let server_url = manager.config.read()
+                                                        .as_ref()
+                                                        .map(|c| c.server_url.clone())
+                                                        .unwrap_or_default();
+
+                                                    if let Ok(client) = SyncClient::new(
+                                                        server_url,
+                                                        Some(new_token.clone()),
+                                                        proxy.as_ref(),
+                                                        manager.tls_backend,
+                                                    ) {
+                                                        *manager.http_client.write() = Some(client);
+                                                        tracing::info!("HTTP 客户端已更新，下次同步将使用新 token");
+                                                    }
+
+                                                    // 更新 device_info 中的 token
+                                                    {
+                                                        let mut device_info = manager.device_info.write();
+                                                        if let Some(ref mut info) = *device_info {
+                                                            info.token = new_token;
+                                                            tracing::info!("设备信息已更新新 token");
+                                                        }
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    tracing::error!("重新认证失败: {}", e);
+                                                }
+                                            }
+                                        });
+                                    } else {
+                                        tracing::debug!("凭据数据上报失败（服务器可能未运行）: {}", error_msg);
+                                    }
                                 }
                             }
                         }
@@ -470,6 +580,7 @@ impl SyncManager {
             auth_method: cred.auth_method.clone(),
             expires_at: cred.expires_at.clone(),
             sync_version: *self.last_sync_version.read(),
+            _extra: std::collections::HashMap::new(),
         })
     }
 
@@ -504,9 +615,9 @@ impl SyncManager {
         // 构建推送请求
         let push_request = PushChangesRequest {
             tokens: Some(tokens.clone()),
-            token_usage: None,
-            token_subscriptions: None,
-            token_bonuses: None,
+            token_usage: Some(vec![]),
+            token_subscriptions: Some(vec![]),
+            token_bonuses: Some(vec![]),
         };
 
         // 推送到服务器
