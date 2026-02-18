@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::mpsc;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 /// 连接状态
@@ -47,7 +48,7 @@ impl SocketIOClient {
         }
     }
 
-    /// 连接并注册设备
+    /// 连接并注册设备（保持连接活跃）
     pub async fn connect_and_register(&self, device_info: DeviceInfo) -> Result<()> {
         *self.state.write() = ConnectionState::Connecting;
 
@@ -69,12 +70,24 @@ impl SocketIOClient {
         tracing::info!("WebSocket 连接成功");
 
         // 等待服务器的连接确认 (0{...})
-        if let Some(Ok(Message::Text(msg))) = read.next().await {
+        let ping_interval = if let Some(Ok(Message::Text(msg))) = read.next().await {
             tracing::debug!("收到服务器消息: {}", msg);
             if !msg.starts_with('0') {
                 anyhow::bail!("未收到 Socket.IO 连接确认");
             }
-        }
+
+            // 解析 pingInterval
+            let interval = if let Ok(handshake) = serde_json::from_str::<serde_json::Value>(&msg[1..]) {
+                handshake.get("pingInterval")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(25000)
+            } else {
+                25000
+            };
+            Duration::from_millis(interval)
+        } else {
+            Duration::from_secs(25)
+        };
 
         *self.state.write() = ConnectionState::Connected;
 
@@ -116,11 +129,12 @@ impl SocketIOClient {
         let timeout = tokio::time::sleep(Duration::from_secs(5));
         tokio::pin!(timeout);
 
+        let mut registered = false;
         loop {
             tokio::select! {
                 Some(Ok(Message::Text(msg))) = read.next() => {
                     tracing::debug!("收到消息: {}", msg);
-                    
+
                     // 解析 Socket.IO 消息
                     if msg.starts_with("42") {
                         let json_str = &msg[2..];
@@ -129,7 +143,8 @@ impl SocketIOClient {
                                 if event_name == "device:registered" {
                                     tracing::info!("设备注册成功");
                                     *self.state.write() = ConnectionState::Registered;
-                                    return Ok(());
+                                    registered = true;
+                                    break;
                                 } else if event_name == "device:error" {
                                     let error_msg = arr.get(1)
                                         .and_then(|v| v.get("message"))
@@ -149,6 +164,49 @@ impl SocketIOClient {
                 }
             }
         }
+
+        if !registered {
+            anyhow::bail!("设备注册失败");
+        }
+
+        // 启动后台任务保持连接和心跳
+        let state = self.state.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    Some(result) = read.next() => {
+                        match result {
+                            Ok(Message::Text(msg)) => {
+                                tracing::debug!("收到消息: {}", msg);
+
+                                // 处理服务器的 ping (2)，回复 pong (3)
+                                if msg == "2" {
+                                    tracing::debug!("收到服务器 ping，回复 pong");
+                                    if let Err(e) = write.send(Message::Text("3".to_string())).await {
+                                        tracing::warn!("发送 pong 失败: {}", e);
+                                        *state.write() = ConnectionState::Error("心跳失败".to_string());
+                                        break;
+                                    }
+                                }
+                            }
+                            Ok(Message::Close(_)) => {
+                                tracing::info!("WebSocket 连接关闭");
+                                *state.write() = ConnectionState::Disconnected;
+                                break;
+                            }
+                            Err(e) => {
+                                tracing::warn!("WebSocket 读取错误: {}", e);
+                                *state.write() = ConnectionState::Error(format!("读取错误: {}", e));
+                                break;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        });
+
+        Ok(())
     }
 
     pub fn get_state(&self) -> ConnectionState {
