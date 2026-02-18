@@ -261,6 +261,10 @@ if pgrep -f 'kiro-rs' > /dev/null 2>&1; then
     done
 fi
 
+# 清除代理环境变量（避免内网连接走代理）
+unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy
+echo -e "${GREEN}✓ 已清除代理环境变量${NC}"
+
 # 运行服务
 echo -e "${GREEN}==> 启动 kiro-rs 服务...${NC}"
 echo -e "${YELLOW}配置文件: $CONFIG_FILE${NC}"

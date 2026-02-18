@@ -5,10 +5,11 @@
 pub mod auth;
 pub mod client;
 pub mod manager;
+pub mod socketio_client;
 pub mod types;
 pub mod websocket;
 
 pub use auth::AuthClient;
 pub use client::SyncClient;
 pub use manager::SyncManager;
-pub use websocket::{DeviceClient, DeviceInfo};
+pub use socketio_client::{DeviceInfo, SocketIOClient};

@@ -12,7 +12,7 @@ use tokio::time;
 use crate::http_client::ProxyConfig;
 use crate::kiro::model::credentials::KiroCredentials;
 use crate::model::config::{Config, SyncConfig, TlsBackend};
-use crate::sync::{AuthClient, DeviceClient, DeviceInfo, SyncClient};
+use crate::sync::{AuthClient, DeviceInfo, SocketIOClient, SyncClient};
 use crate::sync::types::{PushChangesRequest, TokenSync};
 
 /// 同步管理器
@@ -20,7 +20,7 @@ pub struct SyncManager {
     /// HTTP 同步客户端
     http_client: Arc<RwLock<Option<SyncClient>>>,
     /// WebSocket 设备客户端
-    ws_client: Arc<RwLock<Option<DeviceClient>>>,
+    ws_client: Arc<RwLock<Option<SocketIOClient>>>,
     /// 同步配置
     config: Arc<RwLock<Option<SyncConfig>>>,
     /// 上次同步版本号
@@ -71,10 +71,7 @@ impl SyncManager {
 
         // 如果配置了同步，创建 WebSocket 客户端
         let ws_client = if let Some(ref cfg) = sync_config {
-            Some(DeviceClient::new(
-                cfg.server_url.clone(),
-                Duration::from_secs(cfg.heartbeat_interval),
-            ))
+            Some(SocketIOClient::new(cfg.server_url.clone()))
         } else {
             None
         };
@@ -106,10 +103,7 @@ impl SyncManager {
         *self.http_client.write() = Some(http_client);
 
         // 更新 WebSocket 客户端
-        let ws_client = DeviceClient::new(
-            config.server_url.clone(),
-            Duration::from_secs(config.heartbeat_interval),
-        );
+        let ws_client = SocketIOClient::new(config.server_url.clone());
         *self.ws_client.write() = Some(ws_client);
 
         *self.config.write() = Some(config);
@@ -298,7 +292,7 @@ impl SyncManager {
         // 连接 WebSocket
         let ws_client = self.ws_client.read().as_ref().cloned();
         if let Some(client) = ws_client {
-            match client.connect_and_register(device_info, token_manager.clone(), self.clone()).await {
+            match client.connect_and_register(device_info).await {
                 Ok(_) => tracing::info!("WebSocket 设备连接成功"),
                 Err(e) => tracing::debug!("WebSocket 连接失败（服务器可能未运行）: {}", e),
             }
@@ -311,8 +305,6 @@ impl SyncManager {
         let credentials = self.credentials.clone();
         let device_info_for_sync = self.device_info.clone();
         let ws_client_for_reconnect = self.ws_client.clone();
-        let token_manager_for_reconnect = token_manager.clone();
-        let self_for_reconnect = self.clone();
 
         tokio::spawn(async move {
             let mut interval = time::interval(sync_interval);
@@ -327,16 +319,12 @@ impl SyncManager {
                 };
 
                 if let (Some(ws_client), Some(device_info)) = (ws_client_opt, device_info_opt) {
-                    let state = ws_client.get_state_sync();
-                    if matches!(state, crate::sync::websocket::ConnectionState::Error(_))
-                        || matches!(state, crate::sync::websocket::ConnectionState::Disconnected) {
+                    let state = ws_client.get_state();
+                    if matches!(state, crate::sync::socketio_client::ConnectionState::Error(_))
+                        || matches!(state, crate::sync::socketio_client::ConnectionState::Disconnected) {
                         tracing::info!("检测到 WebSocket 断开，尝试重连...");
 
-                        match ws_client.connect_and_register(
-                            device_info,
-                            token_manager_for_reconnect.clone(),
-                            self_for_reconnect.clone(),
-                        ).await {
+                        match ws_client.connect_and_register(device_info).await {
                             Ok(_) => tracing::info!("WebSocket 重连成功"),
                             Err(e) => tracing::warn!("WebSocket 重连失败: {}", e),
                         }
@@ -697,13 +685,13 @@ impl SyncManager {
     pub fn get_connection_state(&self) -> Option<String> {
         let ws_client = self.ws_client.read();
         if let Some(client) = ws_client.as_ref() {
-            let state = client.get_state_sync();
+            let state = client.get_state();
             Some(match state {
-                crate::sync::websocket::ConnectionState::Disconnected => "disconnected".to_string(),
-                crate::sync::websocket::ConnectionState::Connecting => "connecting".to_string(),
-                crate::sync::websocket::ConnectionState::Connected => "connected".to_string(),
-                crate::sync::websocket::ConnectionState::Registered => "registered".to_string(),
-                crate::sync::websocket::ConnectionState::Error(msg) => format!("error: {}", msg),
+                crate::sync::socketio_client::ConnectionState::Disconnected => "disconnected".to_string(),
+                crate::sync::socketio_client::ConnectionState::Connecting => "connecting".to_string(),
+                crate::sync::socketio_client::ConnectionState::Connected => "connected".to_string(),
+                crate::sync::socketio_client::ConnectionState::Registered => "registered".to_string(),
+                crate::sync::socketio_client::ConnectionState::Error(msg) => format!("error: {}", msg),
             })
         } else {
             None

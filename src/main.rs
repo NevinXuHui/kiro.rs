@@ -25,6 +25,20 @@ use model::config::Config;
 
 #[tokio::main]
 async fn main() {
+    // 清除代理环境变量，避免内网连接走代理
+    // 注意：rust_socketio 使用的 reqwest 会自动检测系统代理
+    // 我们需要设置 NO_PROXY 来排除内网地址
+    unsafe {
+        std::env::remove_var("HTTP_PROXY");
+        std::env::remove_var("HTTPS_PROXY");
+        std::env::remove_var("http_proxy");
+        std::env::remove_var("https_proxy");
+
+        // 设置 NO_PROXY 排除所有内网地址和本地地址
+        std::env::set_var("NO_PROXY", "localhost,127.0.0.1,*.local,10.*,172.16.*,172.17.*,172.18.*,172.19.*,172.20.*,172.21.*,172.22.*,172.23.*,172.24.*,172.25.*,172.26.*,172.27.*,172.28.*,172.29.*,172.30.*,172.31.*,192.168.*,100.*");
+        std::env::set_var("no_proxy", "localhost,127.0.0.1,*.local,10.*,172.16.*,172.17.*,172.18.*,172.19.*,172.20.*,172.21.*,172.22.*,172.23.*,172.24.*,172.25.*,172.26.*,172.27.*,172.28.*,172.29.*,172.30.*,172.31.*,192.168.*,100.*");
+    }
+
     // 解析命令行参数
     let args = Args::parse();
 
