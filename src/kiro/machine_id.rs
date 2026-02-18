@@ -32,15 +32,6 @@ fn normalize_machine_id(machine_id: &str) -> Option<String> {
     None
 }
 
-/// 生成随机的 Machine ID（64 位十六进制字符串）
-pub fn generate_random() -> String {
-    let mut bytes = [0u8; 32];
-    for byte in &mut bytes {
-        *byte = fastrand::u8(..);
-    }
-    hex::encode(bytes)
-}
-
 /// 根据凭证信息生成唯一的 Machine ID
 ///
 /// 优先使用凭据级 machineId，其次使用 config.machineId，然后使用 refreshToken 生成

@@ -566,6 +566,7 @@ impl MultiTokenManager {
         let mut next_id = max_existing_id + 1;
         let mut has_new_ids = false;
         let mut has_new_machine_ids = false;
+        let config_ref = &config;
 
         let entries: Vec<CredentialEntry> = credentials
             .into_iter()
@@ -579,9 +580,12 @@ impl MultiTokenManager {
                     id
                 });
                 if cred.machine_id.is_none() {
-                    // 生成随机的 machineId
-                    cred.machine_id = Some(machine_id::generate_random());
-                    has_new_machine_ids = true;
+                    if let Some(machine_id) =
+                        machine_id::generate_from_credentials(&cred, config_ref)
+                    {
+                        cred.machine_id = Some(machine_id);
+                        has_new_machine_ids = true;
+                    }
                 }
                 CredentialEntry {
                     id,
