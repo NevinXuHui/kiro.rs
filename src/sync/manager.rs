@@ -289,13 +289,11 @@ impl SyncManager {
 
         tracing::info!("账号类型: {}, 设备类型: {}", account_type, device_type);
 
-        // 连接 WebSocket
+        // 启动 WebSocket 自动重连
         let ws_client = self.ws_client.read().as_ref().cloned();
         if let Some(client) = ws_client {
-            match client.connect_and_register(device_info).await {
-                Ok(_) => tracing::info!("WebSocket 设备连接成功"),
-                Err(e) => tracing::debug!("WebSocket 连接失败（服务器可能未运行）: {}", e),
-            }
+            tracing::info!("启动 WebSocket 自动重连任务");
+            client.connect_and_register_with_retry(device_info.clone()).await;
         }
 
         // 启动定期同步任务
@@ -304,32 +302,11 @@ impl SyncManager {
         let last_sync_version = self.last_sync_version.clone();
         let credentials = self.credentials.clone();
         let device_info_for_sync = self.device_info.clone();
-        let ws_client_for_reconnect = self.ws_client.clone();
 
         tokio::spawn(async move {
             let mut interval = time::interval(sync_interval);
             loop {
                 interval.tick().await;
-
-                // 检查 WebSocket 连接状态并尝试重连
-                let (ws_client_opt, device_info_opt) = {
-                    let ws_client = ws_client_for_reconnect.read().as_ref().cloned();
-                    let device_info = device_info_for_sync.read().clone();
-                    (ws_client, device_info)
-                };
-
-                if let (Some(ws_client), Some(device_info)) = (ws_client_opt, device_info_opt) {
-                    let state = ws_client.get_state();
-                    if matches!(state, crate::sync::socketio_client::ConnectionState::Error(_))
-                        || matches!(state, crate::sync::socketio_client::ConnectionState::Disconnected) {
-                        tracing::info!("检测到 WebSocket 断开，尝试重连...");
-
-                        match ws_client.connect_and_register(device_info).await {
-                            Ok(_) => tracing::info!("WebSocket 重连成功"),
-                            Err(e) => tracing::warn!("WebSocket 重连失败: {}", e),
-                        }
-                    }
-                }
 
                 let client = {
                     let guard = http_client.read();

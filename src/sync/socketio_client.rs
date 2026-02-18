@@ -48,12 +48,49 @@ impl SocketIOClient {
         }
     }
 
-    /// 连接并注册设备（保持连接活跃）
-    pub async fn connect_and_register(&self, device_info: DeviceInfo) -> Result<()> {
-        *self.state.write() = ConnectionState::Connecting;
+    /// 连接并注册设备（带自动重连）
+    pub async fn connect_and_register_with_retry(&self, device_info: DeviceInfo) {
+        let state = self.state.clone();
+        let server_url = self.server_url.clone();
+        
+        tokio::spawn(async move {
+            let mut retry_delay = Duration::from_secs(1);
+            let max_retry_delay = Duration::from_secs(30);
+            
+            loop {
+                tracing::info!("尝试连接 Socket.IO 服务器...");
+                
+                match Self::connect_once(&server_url, &device_info, state.clone()).await {
+                    Ok(_) => {
+                        // 连接断开了，重置重试延迟
+                        tracing::info!("连接已断开，准备重连");
+                        retry_delay = Duration::from_secs(1);
+                    }
+                    Err(e) => {
+                        tracing::warn!("连接失败: {}，{}秒后重试", e, retry_delay.as_secs());
+                        *state.write() = ConnectionState::Error(format!("连接失败: {}", e));
+                        
+                        // 指数退避，最多 30 秒
+                        retry_delay = std::cmp::min(retry_delay * 2, max_retry_delay);
+                    }
+                }
+                
+                // 等待后重试
+                tokio::time::sleep(retry_delay).await;
+            }
+        });
+    }
+
+    /// 单次连接尝试（保持连接活跃）
+    async fn connect_once(
+        server_url: &str,
+        device_info: &DeviceInfo,
+        state: Arc<RwLock<ConnectionState>>,
+    ) -> Result<()> {
+        *state.write() = ConnectionState::Connecting;
 
         // 构建 Socket.IO 握手 URL
-        let ws_url = self.server_url
+        let ws_url = server_url
             .replace("http://", "ws://")
             .replace("https://", "wss://");
         let handshake_url = format!("{}/socket.io/?EIO=4&transport=websocket", ws_url);
@@ -89,7 +126,7 @@ impl SocketIOClient {
             Duration::from_secs(25)
         };
 
-        *self.state.write() = ConnectionState::Connected;
+        *state.write() = ConnectionState::Connected;
 
         // 发送 Socket.IO 连接包 (40)
         write.send(Message::Text("40".to_string())).await?;
@@ -142,7 +179,7 @@ impl SocketIOClient {
                             if let Some(event_name) = arr.get(0).and_then(|v| v.as_str()) {
                                 if event_name == "device:registered" {
                                     tracing::info!("设备注册成功");
-                                    *self.state.write() = ConnectionState::Registered;
+                                    *state.write() = ConnectionState::Registered;
                                     registered = true;
                                     break;
                                 } else if event_name == "device:error" {
@@ -151,7 +188,7 @@ impl SocketIOClient {
                                         .and_then(|v| v.as_str())
                                         .unwrap_or("未知错误");
                                     tracing::error!("设备注册失败: {}", error_msg);
-                                    *self.state.write() = ConnectionState::Error(error_msg.to_string());
+                                    *state.write() = ConnectionState::Error(error_msg.to_string());
                                     anyhow::bail!("设备注册失败: {}", error_msg);
                                 }
                             }
@@ -169,44 +206,48 @@ impl SocketIOClient {
             anyhow::bail!("设备注册失败");
         }
 
-        // 启动后台任务保持连接和心跳
-        let state = self.state.clone();
-        tokio::spawn(async move {
-            loop {
-                tokio::select! {
-                    Some(result) = read.next() => {
-                        match result {
-                            Ok(Message::Text(msg)) => {
-                                tracing::debug!("收到消息: {}", msg);
+        // 保持连接和心跳（阻塞直到连接断开）
+        let state_clone = state.clone();
+        loop {
+            tokio::select! {
+                Some(result) = read.next() => {
+                    match result {
+                        Ok(Message::Text(msg)) => {
+                            tracing::debug!("收到消息: {}", msg);
 
-                                // 处理服务器的 ping (2)，回复 pong (3)
-                                if msg == "2" {
-                                    tracing::debug!("收到服务器 ping，回复 pong");
-                                    if let Err(e) = write.send(Message::Text("3".to_string())).await {
-                                        tracing::warn!("发送 pong 失败: {}", e);
-                                        *state.write() = ConnectionState::Error("心跳失败".to_string());
-                                        break;
-                                    }
+                            // 处理服务器的 ping (2)，回复 pong (3)
+                            if msg == "2" {
+                                tracing::debug!("收到服务器 ping，回复 pong");
+                                if let Err(e) = write.send(Message::Text("3".to_string())).await {
+                                    tracing::warn!("发送 pong 失败: {}", e);
+                                    *state_clone.write() = ConnectionState::Error("心跳失败".to_string());
+                                    break;
                                 }
                             }
-                            Ok(Message::Close(_)) => {
-                                tracing::info!("WebSocket 连接关闭");
-                                *state.write() = ConnectionState::Disconnected;
-                                break;
-                            }
-                            Err(e) => {
-                                tracing::warn!("WebSocket 读取错误: {}", e);
-                                *state.write() = ConnectionState::Error(format!("读取错误: {}", e));
-                                break;
-                            }
-                            _ => {}
                         }
+                        Ok(Message::Close(_)) => {
+                            tracing::info!("WebSocket 连接关闭");
+                            *state_clone.write() = ConnectionState::Disconnected;
+                            break;
+                        }
+                        Err(e) => {
+                            tracing::warn!("WebSocket 读取错误: {}", e);
+                            *state_clone.write() = ConnectionState::Error(format!("读取错误: {}", e));
+                            break;
+                        }
+                        _ => {}
                     }
                 }
             }
-        });
-
+        }
+        
+        tracing::info!("连接已断开");
         Ok(())
+    }
+
+    /// 连接并注册设备（兼容旧接口）
+    pub async fn connect_and_register(&self, device_info: DeviceInfo) -> Result<()> {
+        Self::connect_once(&self.server_url, &device_info, self.state.clone()).await
     }
 
     pub fn get_state(&self) -> ConnectionState {
