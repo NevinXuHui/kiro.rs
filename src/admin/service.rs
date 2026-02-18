@@ -233,7 +233,7 @@ impl AdminService {
             proxy_url: req.proxy_url,
             proxy_username: req.proxy_username,
             proxy_password: req.proxy_password,
-            disabled: false,
+            disabled: false, // 新添加的凭据默认启用
             disabled_reason: None,
             sync_version: 0,
             last_modified_at: None,

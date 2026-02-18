@@ -93,9 +93,8 @@ pub struct KiroCredentials {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proxy_password: Option<String>,
 
-    /// 是否已禁用（重启后恢复禁用状态）
+    /// 凭据是否被禁用（默认为 false）
     #[serde(default)]
-    #[serde(skip_serializing_if = "is_false")]
     pub disabled: bool,
 
     /// 禁用原因（manual / too_many_failures / quota_exceeded）
@@ -384,13 +383,6 @@ mod tests {
             proxy_username: None,
             proxy_password: None,
             disabled: false,
-            disabled_reason: None,
-            sync_version: 0,
-            last_modified_at: None,
-            device_id: None,
-            device_name: None,
-            device_type: None,
-            last_sync_at: None,
         };
 
         let json = creds.to_pretty_json().unwrap();
@@ -507,7 +499,6 @@ mod tests {
         // 测试 region 为 None 时不序列化
         let creds = KiroCredentials {
             refresh_token: Some("test".to_string()),
-            ..Default::default()
         };
 
         let json = creds.to_pretty_json().unwrap();
@@ -624,13 +615,6 @@ mod tests {
             proxy_username: None,
             proxy_password: None,
             disabled: false,
-            disabled_reason: None,
-            sync_version: 0,
-            last_modified_at: None,
-            device_id: None,
-            device_name: None,
-            device_type: None,
-            last_sync_at: None,
         };
 
         let json = original.to_pretty_json().unwrap();
