@@ -206,32 +206,11 @@ impl SocketIOClient {
             anyhow::bail!("设备注册失败");
         }
 
-        // 保持连接和心跳（阻塞直到连接断开）
+        // 保持连接（阻塞直到连接断开）
         let state_clone = state.clone();
-        let device_id = device_info.device_id.clone();
-        let heartbeat_interval = Duration::from_secs(15); // 15秒心跳间隔
-        let mut heartbeat_timer = tokio::time::interval(heartbeat_interval);
-        heartbeat_timer.tick().await; // 跳过第一次立即触发
         
         loop {
             tokio::select! {
-                _ = heartbeat_timer.tick() => {
-                    // 发送应用层心跳
-                    let heartbeat_data = json!({
-                        "deviceId": device_id,
-                    });
-                    let heartbeat_packet = format!(
-                        "42{}",
-                        json!(["device:heartbeat", heartbeat_data]).to_string()
-                    );
-                    
-                    if let Err(e) = write.send(Message::Text(heartbeat_packet)).await {
-                        tracing::warn!("发送心跳失败: {}", e);
-                        *state_clone.write() = ConnectionState::Error("心跳失败".to_string());
-                        break;
-                    }
-                    tracing::debug!("已发送心跳");
-                }
                 Some(result) = read.next() => {
                     match result {
                         Ok(Message::Text(msg)) => {
@@ -244,6 +223,18 @@ impl SocketIOClient {
                                     tracing::warn!("发送 pong 失败: {}", e);
                                     *state_clone.write() = ConnectionState::Error("心跳失败".to_string());
                                     break;
+                                }
+                            }
+                            
+                            // 处理服务器推送的业务心跳
+                            if msg.starts_with("42") {
+                                let json_str = &msg[2..];
+                                if let Ok(arr) = serde_json::from_str::<serde_json::Value>(json_str) {
+                                    if let Some(event_name) = arr.get(0).and_then(|v| v.as_str()) {
+                                        if event_name == "device:heartbeat" {
+                                            tracing::debug!("收到服务器心跳推送");
+                                        }
+                                    }
                                 }
                             }
                         }
