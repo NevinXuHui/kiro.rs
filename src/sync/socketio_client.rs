@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::mpsc;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 /// 连接状态
@@ -141,7 +140,7 @@ impl SocketIOClient {
         tracing::info!("WebSocket 连接成功");
 
         // 等待服务器的连接确认 (0{...})
-        let ping_interval = if let Some(Ok(Message::Text(msg))) = read.next().await {
+        let _ping_interval = if let Some(Ok(Message::Text(msg))) = read.next().await {
             tracing::debug!("收到服务器消息: {}", msg);
             if !msg.starts_with('0') {
                 anyhow::bail!("未收到 Socket.IO 连接确认");
@@ -200,7 +199,6 @@ impl SocketIOClient {
         let timeout = tokio::time::sleep(Duration::from_secs(5));
         tokio::pin!(timeout);
 
-        let mut registered = false;
         loop {
             tokio::select! {
                 Some(Ok(Message::Text(msg))) = read.next() => {
@@ -214,7 +212,6 @@ impl SocketIOClient {
                                 if event_name == "device:registered" {
                                     tracing::info!("设备注册成功");
                                     *state.write() = ConnectionState::Registered;
-                                    registered = true;
 
                                     // 首次注册成功，通知 SyncManager 立即推送
                                     if is_first_registration {
@@ -243,10 +240,6 @@ impl SocketIOClient {
                     anyhow::bail!("设备注册超时");
                 }
             }
-        }
-
-        if !registered {
-            anyhow::bail!("设备注册失败");
         }
 
         // 保持连接和心跳（阻塞直到连接断开）

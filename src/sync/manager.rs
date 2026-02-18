@@ -35,6 +35,8 @@ pub struct SyncManager {
     proxy_config: Arc<RwLock<Option<ProxyConfig>>>,
     /// TLS 后端
     tls_backend: TlsBackend,
+    /// Token 管理器（用于持久化保存凭据）
+    token_manager: Arc<RwLock<Option<Arc<crate::kiro::token_manager::MultiTokenManager>>>>,
 }
 
 impl SyncManager {
@@ -89,6 +91,7 @@ impl SyncManager {
             credentials: Arc::new(RwLock::new(Vec::new())),
             proxy_config: Arc::new(RwLock::new(proxy_config)),
             tls_backend: config.tls_backend,
+            token_manager: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -272,6 +275,9 @@ impl SyncManager {
             tracing::info!("同步功能未启用");
             return Ok(());
         }
+
+        // 保存 token_manager 引用
+        *self.token_manager.write() = Some(token_manager.clone());
 
         // 确保已认证
         let token = self.ensure_authenticated().await?;
@@ -818,7 +824,7 @@ impl SyncManager {
                 let kiro_cred = crate::kiro::model::credentials::KiroCredentials {
                     id: None,
                     access_token: None,
-                    refresh_token: Some(credential.refresh_token),
+                    refresh_token: Some(credential.refresh_token.clone()),
                     profile_arn: None,
                     expires_at: None,
                     auth_method: Some(credential.auth_method),
@@ -844,25 +850,94 @@ impl SyncManager {
                     last_sync_at: None,
                 };
 
-                // 添加到本地凭据列表
-                let mut creds = self.credentials.write();
-                creds.push(kiro_cred.clone());
-                drop(creds);
+                // 通过 token_manager 添加凭据（会自动持久化到配置文件）
+                let token_manager = self.token_manager.read().clone();
+                if let Some(manager) = token_manager {
+                    match manager.add_credential(kiro_cred.clone()).await {
+                        Ok(_) => {
+                            tracing::info!("凭据已添加并持久化，email={:?}", kiro_cred.email);
 
-                tracing::info!("凭据已添加到内存，email={:?}", kiro_cred.email);
-
-                // TODO: 保存到配置文件（需要通过 token_manager 或其他方式）
+                            // 同时添加到本地凭据列表（用于上报）
+                            let mut creds = self.credentials.write();
+                            // 检查是否已存在相同 refresh_token 的凭据，避免重复
+                            if !creds.iter().any(|c| c.refresh_token == kiro_cred.refresh_token) {
+                                creds.push(kiro_cred);
+                            } else {
+                                tracing::debug!("凭据已存在于内存中，跳过添加");
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("添加凭据失败: {}", e);
+                            return Err(e);
+                        }
+                    }
+                } else {
+                    tracing::warn!("token_manager 未初始化，仅添加到内存");
+                    let mut creds = self.credentials.write();
+                    // 检查是否已存在
+                    if !creds.iter().any(|c| c.refresh_token == kiro_cred.refresh_token) {
+                        creds.push(kiro_cred);
+                    }
+                }
 
                 Ok(())
             }
             DeviceCommand::DeleteCredential { credential_id, command_id } => {
                 tracing::info!("收到删除凭据命令: id={}, command_id={}", credential_id, command_id);
-                // TODO: 实现删除逻辑
+
+                // 通过 token_manager 删除凭据
+                let token_manager = self.token_manager.read().clone();
+                if let Some(manager) = token_manager {
+                    match manager.delete_credential(credential_id) {
+                        Ok(_) => {
+                            tracing::info!("凭据已删除，id={}", credential_id);
+
+                            // 同时从本地凭据列表中删除
+                            let mut creds = self.credentials.write();
+                            creds.retain(|c| c.id != Some(credential_id));
+                        }
+                        Err(e) => {
+                            tracing::error!("删除凭据失败: {}", e);
+                            return Err(e);
+                        }
+                    }
+                } else {
+                    tracing::warn!("token_manager 未初始化，仅从内存删除");
+                    let mut creds = self.credentials.write();
+                    creds.retain(|c| c.id != Some(credential_id));
+                }
+
                 Ok(())
             }
             DeviceCommand::SetDisabled { credential_id, disabled, command_id } => {
                 tracing::info!("收到设置禁用状态命令: id={}, disabled={}, command_id={}", credential_id, disabled, command_id);
-                // TODO: 实现禁用/启用逻辑
+
+                // 通过 token_manager 设置禁用状态
+                let token_manager = self.token_manager.read().clone();
+                if let Some(manager) = token_manager {
+                    match manager.set_disabled(credential_id, disabled) {
+                        Ok(_) => {
+                            tracing::info!("凭据禁用状态已更新，id={}, disabled={}", credential_id, disabled);
+
+                            // 同时更新本地凭据列表
+                            let mut creds = self.credentials.write();
+                            if let Some(cred) = creds.iter_mut().find(|c| c.id == Some(credential_id)) {
+                                cred.disabled = disabled;
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("设置禁用状态失败: {}", e);
+                            return Err(e);
+                        }
+                    }
+                } else {
+                    tracing::warn!("token_manager 未初始化，仅更新内存");
+                    let mut creds = self.credentials.write();
+                    if let Some(cred) = creds.iter_mut().find(|c| c.id == Some(credential_id)) {
+                        cred.disabled = disabled;
+                    }
+                }
+
                 Ok(())
             }
         }
@@ -881,6 +956,7 @@ impl Clone for SyncManager {
             credentials: self.credentials.clone(),
             proxy_config: self.proxy_config.clone(),
             tls_backend: self.tls_backend,
+            token_manager: self.token_manager.clone(),
         }
     }
 }

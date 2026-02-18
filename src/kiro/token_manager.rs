@@ -561,6 +561,13 @@ impl MultiTokenManager {
         credentials_path: Option<PathBuf>,
         is_multiple_format: bool,
     ) -> anyhow::Result<Self> {
+        // 调试：打印接收到的凭据数量和 disabled 状态
+        tracing::info!("MultiTokenManager::new() 接收到 {} 个凭据", credentials.len());
+        for (i, cred) in credentials.iter().enumerate() {
+            tracing::debug!("凭据 {}: id={:?}, disabled={}, email={:?}",
+                i, cred.id, cred.disabled, cred.email);
+        }
+
         // 计算当前最大 ID，为没有 ID 的凭据分配新 ID
         let max_existing_id = credentials.iter().filter_map(|c| c.id).max().unwrap_or(0);
         let mut next_id = max_existing_id + 1;
@@ -598,6 +605,13 @@ impl MultiTokenManager {
                 }
             })
             .collect();
+
+        // 调试：打印最终的 entries 数量
+        tracing::info!("创建了 {} 个 CredentialEntry", entries.len());
+        for entry in &entries {
+            tracing::debug!("Entry: id={}, disabled={}, email={:?}",
+                entry.id, entry.disabled, entry.credentials.email);
+        }
 
         // 检测重复 ID
         let mut seen_ids = std::collections::HashSet::new();
@@ -645,6 +659,9 @@ impl MultiTokenManager {
 
         // 加载持久化的统计数据（success_count, last_used_at）
         manager.load_stats();
+
+        // 调试：确认最终的 entries 数量
+        tracing::info!("MultiTokenManager::new() 完成，最终有 {} 个 entries", manager.entries.lock().len());
 
         Ok(manager)
     }
@@ -1291,6 +1308,11 @@ impl MultiTokenManager {
     /// 获取管理器状态快照（用于 Admin API）
     pub fn snapshot(&self) -> ManagerSnapshot {
         let entries = self.entries.lock();
+        tracing::info!("snapshot() 调用，entries.len() = {}", entries.len());
+        for (i, entry) in entries.iter().enumerate() {
+            tracing::debug!("snapshot() entry {}: id={}, disabled={}, email={:?}",
+                i, entry.id, entry.disabled, entry.credentials.email);
+        }
         let current_id = *self.current_id.lock();
         let available = entries.iter().filter(|e| !e.disabled).count();
 
