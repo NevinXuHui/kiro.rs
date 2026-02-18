@@ -596,10 +596,10 @@ impl MultiTokenManager {
                 }
                 CredentialEntry {
                     id,
-                    credentials: cred,
-                    failure_count: 0,
                     disabled: cred.disabled, // 从配置文件读取 disabled 状态
                     disabled_reason: cred.disabled_reason.as_deref().and_then(DisabledReason::from_str),
+                    credentials: cred,
+                    failure_count: 0,
                     success_count: 0,
                     last_used_at: None,
                 }
