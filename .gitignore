@@ -47,3 +47,4 @@
 # macOS
 .DS_Store
 
+.claude/
