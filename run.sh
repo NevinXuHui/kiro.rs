@@ -123,9 +123,10 @@ if [ ! -f "$CONFIG_FILE" ]; then
 fi
 
 if [ ! -f "$CREDENTIALS_FILE" ]; then
-    echo -e "${RED}错误: 凭据文件 $CREDENTIALS_FILE 不存在${NC}"
-    echo "请创建凭据文件或使用 -r 指定其他凭据文件"
-    exit 1
+    echo -e "${YELLOW}警告: 凭据文件 $CREDENTIALS_FILE 不存在，正在创建空凭据文件...${NC}"
+    echo "[]" > "$CREDENTIALS_FILE"
+    echo -e "${GREEN}✓ 已创建空凭据文件 $CREDENTIALS_FILE${NC}"
+    echo -e "${YELLOW}提示: 请通过 Admin UI 添加凭据或手动编辑 $CREDENTIALS_FILE${NC}"
 fi
 
 # 自动检测前端更新
