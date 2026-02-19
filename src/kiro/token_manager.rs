@@ -1610,7 +1610,12 @@ impl MultiTokenManager {
         validated_cred.region = new_cred.region;
         validated_cred.auth_region = new_cred.auth_region;
         validated_cred.api_region = new_cred.api_region;
-        validated_cred.machine_id = new_cred.machine_id;
+
+        // 如果没有提供 machine_id，自动生成
+        validated_cred.machine_id = new_cred.machine_id.or_else(|| {
+            machine_id::generate_from_credentials(&validated_cred, &self.config)
+        });
+
         validated_cred.email = new_cred.email;
         validated_cred.proxy_url = new_cred.proxy_url;
         validated_cred.proxy_username = new_cred.proxy_username;
