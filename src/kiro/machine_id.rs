@@ -34,8 +34,9 @@ fn normalize_machine_id(machine_id: &str) -> Option<String> {
 
 /// 根据凭证信息生成唯一的 Machine ID
 ///
-/// 优先使用凭据级 machineId，其次使用 config.machineId，然后使用 refreshToken 生成
-pub fn generate_from_credentials(credentials: &KiroCredentials, config: &Config) -> Option<String> {
+/// 优先使用凭据级 machineId，如果没有则使用 refreshToken 生成唯一机器码
+/// 注意：不使用全局 config.machineId，确保每个凭据都有独立的设备指纹
+pub fn generate_from_credentials(credentials: &KiroCredentials, _config: &Config) -> Option<String> {
     // 如果配置了凭据级 machineId，优先使用
     if let Some(ref machine_id) = credentials.machine_id {
         if let Some(normalized) = normalize_machine_id(machine_id) {
@@ -43,14 +44,7 @@ pub fn generate_from_credentials(credentials: &KiroCredentials, config: &Config)
         }
     }
 
-    // 如果配置了全局 machineId，作为默认值
-    if let Some(ref machine_id) = config.machine_id {
-        if let Some(normalized) = normalize_machine_id(machine_id) {
-            return Some(normalized);
-        }
-    }
-
-    // 使用 refreshToken 生成
+    // 使用 refreshToken 生成唯一机器码（不使用全局 machineId）
     if let Some(ref refresh_token) = credentials.refresh_token {
         if !refresh_token.is_empty() {
             return Some(sha256_hex(&format!("KotlinNativeAPI/{}", refresh_token)));
@@ -84,22 +78,11 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_with_custom_machine_id() {
-        let credentials = KiroCredentials::default();
-        let mut config = Config::default();
-        config.machine_id = Some("a".repeat(64));
-
-        let result = generate_from_credentials(&credentials, &config);
-        assert_eq!(result, Some("a".repeat(64)));
-    }
-
-    #[test]
-    fn test_generate_with_credential_machine_id_overrides_config() {
+    fn test_generate_with_credential_machine_id() {
         let mut credentials = KiroCredentials::default();
         credentials.machine_id = Some("b".repeat(64));
 
-        let mut config = Config::default();
-        config.machine_id = Some("a".repeat(64));
+        let config = Config::default();
 
         let result = generate_from_credentials(&credentials, &config);
         assert_eq!(result, Some("b".repeat(64)));
