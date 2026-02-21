@@ -22,6 +22,10 @@ use kiro::provider::KiroProvider;
 use kiro::token_manager::MultiTokenManager;
 use model::arg::Args;
 use model::config::Config;
+use axum::{
+    response::{IntoResponse, Redirect},
+    routing::get,
+};
 
 #[tokio::main]
 async fn main() {
@@ -224,6 +228,7 @@ async fn main() {
             anthropic_app
                 .nest("/api/admin", admin_app)
                 .nest("/admin", admin_ui_app)
+                .route("/admin/", get(|| async { Redirect::permanent("/admin") }))
                 .nest("/api/user", user_api_app)
                 .nest("/user", user_ui_app)
         }

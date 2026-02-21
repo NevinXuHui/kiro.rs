@@ -18,7 +18,7 @@ struct Asset;
 pub fn create_admin_ui_router() -> Router {
     Router::new()
         .route("/", get(index_handler))
-        .route("/{*file}", get(static_handler))
+        .route("/{*path}", get(static_handler))
 }
 
 /// 处理首页请求
@@ -28,7 +28,12 @@ async fn index_handler() -> impl IntoResponse {
 
 /// 处理静态文件请求
 async fn static_handler(uri: Uri) -> impl IntoResponse {
-    let path = uri.path().trim_start_matches('/');
+    let mut path = uri.path().trim_start_matches('/');
+    
+    // 如果路径为空,返回 index.html
+    if path.is_empty() {
+        return serve_index();
+    }
 
     // 安全检查：拒绝包含 .. 的路径
     if path.contains("..") {
