@@ -687,6 +687,16 @@ export function TokenUsagePanel() {
                 )}
               </div>
 
+              {/* 用户输入 */}
+              {selectedRecord.userInput && (
+                <div className="border-t pt-4">
+                  <div className="text-sm font-medium mb-2">用户输入</div>
+                  <div className="text-sm bg-muted/50 px-4 py-3 rounded max-h-40 overflow-y-auto whitespace-pre-wrap break-words">
+                    {selectedRecord.userInput}
+                  </div>
+                </div>
+              )}
+
               {/* 统计信息 */}
               <div className="border-t pt-4">
                 <div className="text-sm font-medium mb-2">统计信息</div>

@@ -912,6 +912,7 @@ async fn test_anthropic_connectivity(state: &AdminState, model: Option<String>, 
             output_tokens,
             None, // 测试请求不关联 API Key
             client_ip, // 记录客户端 IP
+            None, // 测试请求没有用户输入
         );
     }
 

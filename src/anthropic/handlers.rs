@@ -243,6 +243,45 @@ pub async fn post_messages(
     // 提取客户端 IP
     let client_ip = extract_client_ip(&headers, Some(&ConnectInfo(addr)));
 
+    // 提取用户输入（最后一条用户消息）
+    let user_input = payload.messages
+        .iter()
+        .rev()
+        .find(|m| m.role == "user")
+        .and_then(|m| {
+            match &m.content {
+                serde_json::Value::String(s) => Some(s.clone()),
+                serde_json::Value::Array(arr) => {
+                    // 提取所有 text 类型的内容
+                    let texts: Vec<String> = arr
+                        .iter()
+                        .filter_map(|item| {
+                            item.get("type")
+                                .and_then(|t| t.as_str())
+                                .filter(|&t| t == "text")
+                                .and_then(|_| item.get("text"))
+                                .and_then(|t| t.as_str())
+                                .map(|s| s.to_string())
+                        })
+                        .collect();
+                    if texts.is_empty() {
+                        None
+                    } else {
+                        Some(texts.join(" "))
+                    }
+                }
+                _ => None,
+            }
+        })
+        .map(|s| {
+            // 截断到 500 字符
+            if s.len() > 500 {
+                format!("{}...", &s[..500])
+            } else {
+                s
+            }
+        });
+
     tracing::info!(
         model = %payload.model,
         max_tokens = %payload.max_tokens,
@@ -355,6 +394,7 @@ pub async fn post_messages(
             api_key_id,
             key_info.bound_credential_ids.clone(),
             client_ip,
+            user_input,
         )
         .await
     } else {
@@ -368,6 +408,7 @@ pub async fn post_messages(
             api_key_id,
             key_info.bound_credential_ids.clone(),
             client_ip,
+            user_input,
         )
         .await
     }
@@ -384,6 +425,7 @@ async fn handle_stream_request(
     api_key_id: Option<u64>,
     bound_credential_ids: Option<Vec<u64>>,
     client_ip: Option<String>,
+    user_input: Option<String>,
 ) -> Response {
     // 调用 Kiro API（支持多凭据故障转移）
     let api_response = match provider.call_api_stream(request_body, bound_credential_ids.as_deref()).await {
@@ -404,7 +446,7 @@ async fn handle_stream_request(
     let initial_events = ctx.generate_initial_events();
 
     // 创建 SSE 流（使用实际模型名称进行统计）
-    let stream = create_sse_stream(api_response.response, ctx, initial_events, token_usage_tracker, actual_model.to_string(), credential_id, api_key_id, client_ip);
+    let stream = create_sse_stream(api_response.response, ctx, initial_events, token_usage_tracker, actual_model.to_string(), credential_id, api_key_id, client_ip, user_input);
 
     // 返回 SSE 响应
     Response::builder()
@@ -434,6 +476,7 @@ fn create_sse_stream(
     credential_id: u64,
     api_key_id: Option<u64>,
     client_ip: Option<String>,
+    user_input: Option<String>,
 ) -> impl Stream<Item = Result<Bytes, Infallible>> {
     // 先发送初始事件
     let initial_stream = stream::iter(
@@ -451,6 +494,7 @@ fn create_sse_stream(
             let tracker = token_usage_tracker.clone();
             let model = model.clone();
             let client_ip = client_ip.clone();
+            let user_input = user_input.clone();
             async move {
                 if finished {
                     return None;
@@ -495,7 +539,7 @@ fn create_sse_stream(
                                 // 记录 token 使用量
                                 if let Some(ref tracker) = tracker {
                                     let final_input = ctx.context_input_tokens.unwrap_or(ctx.input_tokens);
-                                    tracker.record(model.clone(), credential_id, final_input, ctx.output_tokens, api_key_id, client_ip.clone());
+                                    tracker.record(model.clone(), credential_id, final_input, ctx.output_tokens, api_key_id, client_ip.clone(), user_input.clone());
                                 }
                                 // 发送最终事件并结束
                                 let final_events = ctx.generate_final_events();
@@ -509,7 +553,7 @@ fn create_sse_stream(
                                 // 记录 token 使用量
                                 if let Some(ref tracker) = tracker {
                                     let final_input = ctx.context_input_tokens.unwrap_or(ctx.input_tokens);
-                                    tracker.record(model.clone(), credential_id, final_input, ctx.output_tokens, api_key_id, client_ip.clone());
+                                    tracker.record(model.clone(), credential_id, final_input, ctx.output_tokens, api_key_id, client_ip.clone(), user_input.clone());
                                 }
                                 // 流结束，发送最终事件
                                 let final_events = ctx.generate_final_events();
@@ -549,6 +593,7 @@ async fn handle_non_stream_request(
     api_key_id: Option<u64>,
     bound_credential_ids: Option<Vec<u64>>,
     client_ip: Option<String>,
+    user_input: Option<String>,
 ) -> Response {
     // 调用 Kiro API（支持多凭据故障转移）
     let api_response = match provider.call_api(request_body, bound_credential_ids.as_deref()).await {
@@ -697,6 +742,7 @@ async fn handle_non_stream_request(
             output_tokens,
             api_key_id,
             client_ip,
+            user_input,
         );
     }
 
@@ -823,6 +869,45 @@ pub async fn post_messages_cc(
     // 提取客户端 IP
     let client_ip = extract_client_ip(&headers, Some(&ConnectInfo(addr)));
 
+    // 提取用户输入（最后一条用户消息）
+    let user_input = payload.messages
+        .iter()
+        .rev()
+        .find(|m| m.role == "user")
+        .and_then(|m| {
+            match &m.content {
+                serde_json::Value::String(s) => Some(s.clone()),
+                serde_json::Value::Array(arr) => {
+                    // 提取所有 text 类型的内容
+                    let texts: Vec<String> = arr
+                        .iter()
+                        .filter_map(|item| {
+                            item.get("type")
+                                .and_then(|t| t.as_str())
+                                .filter(|&t| t == "text")
+                                .and_then(|_| item.get("text"))
+                                .and_then(|t| t.as_str())
+                                .map(|s| s.to_string())
+                        })
+                        .collect();
+                    if texts.is_empty() {
+                        None
+                    } else {
+                        Some(texts.join(" "))
+                    }
+                }
+                _ => None,
+            }
+        })
+        .map(|s| {
+            // 截断到 500 字符
+            if s.len() > 500 {
+                format!("{}...", &s[..500])
+            } else {
+                s
+            }
+        });
+
     tracing::info!(
         model = %payload.model,
         max_tokens = %payload.max_tokens,
@@ -936,6 +1021,7 @@ pub async fn post_messages_cc(
             api_key_id,
             key_info.bound_credential_ids.clone(),
             client_ip,
+            user_input,
         )
         .await
     } else {
@@ -949,6 +1035,7 @@ pub async fn post_messages_cc(
             api_key_id,
             key_info.bound_credential_ids.clone(),
             client_ip,
+            user_input,
         )
         .await
     }
@@ -968,6 +1055,7 @@ async fn handle_stream_request_buffered(
     api_key_id: Option<u64>,
     bound_credential_ids: Option<Vec<u64>>,
     client_ip: Option<String>,
+    user_input: Option<String>,
 ) -> Response {
     // 调用 Kiro API（支持多凭据故障转移）
     let api_response = match provider.call_api_stream(request_body, bound_credential_ids.as_deref()).await {
@@ -985,7 +1073,7 @@ async fn handle_stream_request_buffered(
     let ctx = BufferedStreamContext::new(model, estimated_input_tokens, thinking_enabled);
 
     // 创建缓冲 SSE 流（使用实际模型名称进行统计）
-    let stream = create_buffered_sse_stream(api_response.response, ctx, token_usage_tracker, actual_model.to_string(), credential_id, api_key_id, client_ip);
+    let stream = create_buffered_sse_stream(api_response.response, ctx, token_usage_tracker, actual_model.to_string(), credential_id, api_key_id, client_ip, user_input);
 
     // 返回 SSE 响应
     Response::builder()
@@ -1012,6 +1100,7 @@ fn create_buffered_sse_stream(
     credential_id: u64,
     api_key_id: Option<u64>,
     client_ip: Option<String>,
+    user_input: Option<String>,
 ) -> impl Stream<Item = Result<Bytes, Infallible>> {
     let body_stream = response.bytes_stream();
 
@@ -1027,6 +1116,7 @@ fn create_buffered_sse_stream(
             let tracker = token_usage_tracker.clone();
             let model = model.clone();
             let client_ip = client_ip.clone();
+            let user_input = user_input.clone();
             async move {
                 if finished {
                     return None;
@@ -1074,7 +1164,7 @@ fn create_buffered_sse_stream(
                                     // 记录 token 使用量
                                     if let Some(ref tracker) = tracker {
                                         let (final_input, output) = ctx.token_stats();
-                                        tracker.record(model.clone(), credential_id, final_input, output, api_key_id, client_ip.clone());
+                                        tracker.record(model.clone(), credential_id, final_input, output, api_key_id, client_ip.clone(), user_input.clone());
                                     }
                                     // 发生错误，完成处理并返回所有事件
                                     let all_events = ctx.finish_and_get_all_events();
@@ -1088,7 +1178,7 @@ fn create_buffered_sse_stream(
                                     // 记录 token 使用量
                                     if let Some(ref tracker) = tracker {
                                         let (final_input, output) = ctx.token_stats();
-                                        tracker.record(model.clone(), credential_id, final_input, output, api_key_id, client_ip.clone());
+                                        tracker.record(model.clone(), credential_id, final_input, output, api_key_id, client_ip.clone(), user_input.clone());
                                     }
                                     // 流结束，完成处理并返回所有事件（已更正 input_tokens）
                                     let all_events = ctx.finish_and_get_all_events();

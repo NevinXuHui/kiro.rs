@@ -46,6 +46,9 @@ pub struct TokenUsageRecord {
     /// 客户端 IP 地址（可选）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_ip: Option<String>,
+    /// 用户输入内容（可选，截断到前 500 字符）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_input: Option<String>,
 }
 
 /// 分组统计（按凭据或按模型）
@@ -186,6 +189,7 @@ impl TokenUsageTracker {
         output_tokens: i32,
         api_key_id: Option<u64>,
         client_ip: Option<String>,
+        user_input: Option<String>,
     ) {
         let record = TokenUsageRecord {
             timestamp: Utc::now().to_rfc3339(),
@@ -195,6 +199,7 @@ impl TokenUsageTracker {
             input_tokens,
             output_tokens,
             client_ip,
+            user_input,
         };
 
         {

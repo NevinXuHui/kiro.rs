@@ -100,6 +100,7 @@ export interface TokenUsageRecord {
   outputTokens: number
   apiKeyId?: number
   clientIp?: string
+  userInput?: string
 }
 
 // Token 使用统计响应
