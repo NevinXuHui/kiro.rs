@@ -43,6 +43,9 @@ pub struct TokenUsageRecord {
     pub input_tokens: i32,
     /// 输出 tokens
     pub output_tokens: i32,
+    /// 客户端 IP 地址（可选）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_ip: Option<String>,
 }
 
 /// 分组统计（按凭据或按模型）
@@ -182,6 +185,7 @@ impl TokenUsageTracker {
         input_tokens: i32,
         output_tokens: i32,
         api_key_id: Option<u64>,
+        client_ip: Option<String>,
     ) {
         let record = TokenUsageRecord {
             timestamp: Utc::now().to_rfc3339(),
@@ -190,6 +194,7 @@ impl TokenUsageTracker {
             api_key_id,
             input_tokens,
             output_tokens,
+            client_ip,
         };
 
         {

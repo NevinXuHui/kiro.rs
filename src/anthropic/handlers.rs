@@ -14,13 +14,14 @@ use axum::{
     Extension,
     Json as JsonExtractor,
     body::Body,
-    extract::State,
-    http::{StatusCode, header},
+    extract::{State, ConnectInfo},
+    http::{StatusCode, header, HeaderMap},
     response::{IntoResponse, Json, Response},
 };
 use bytes::Bytes;
 use futures::{Stream, StreamExt, stream};
 use serde_json::json;
+use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::time::interval;
 use uuid::Uuid;
@@ -30,6 +31,31 @@ use super::middleware::AppState;
 use super::stream::{BufferedStreamContext, SseEvent, StreamContext};
 use super::types::{CountTokensRequest, CountTokensResponse, ErrorResponse, MessagesRequest, Model, ModelsResponse, OutputConfig, Thinking};
 use super::websearch;
+
+/// 提取客户端 IP 地址
+///
+/// 优先从代理 header 读取（X-Forwarded-For, X-Real-IP），
+/// 回退到直接连接的 socket 地址。
+fn extract_client_ip(headers: &HeaderMap, connect_info: Option<&ConnectInfo<SocketAddr>>) -> Option<String> {
+    // 1. 尝试 X-Forwarded-For（可能包含多个 IP，取第一个）
+    if let Some(forwarded) = headers.get("x-forwarded-for") {
+        if let Ok(value) = forwarded.to_str() {
+            if let Some(first_ip) = value.split(',').next() {
+                return Some(first_ip.trim().to_string());
+            }
+        }
+    }
+
+    // 2. 尝试 X-Real-IP
+    if let Some(real_ip) = headers.get("x-real-ip") {
+        if let Ok(value) = real_ip.to_str() {
+            return Some(value.to_string());
+        }
+    }
+
+    // 3. 回退到直接连接的 IP
+    connect_info.map(|info| info.0.ip().to_string())
+}
 
 /// 将 KiroProvider 错误映射为 HTTP 响应
 fn map_provider_error(err: Error) -> Response {
@@ -182,6 +208,8 @@ pub async fn get_models() -> impl IntoResponse {
 pub async fn post_messages(
     State(state): State<AppState>,
     Extension(key_info): Extension<ApiKeyInfo>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     JsonExtractor(mut payload): JsonExtractor<MessagesRequest>,
 ) -> Response {
     // 权限检查：只读 Key 不允许创建消息
@@ -211,6 +239,9 @@ pub async fn post_messages(
     }
 
     let api_key_id = Some(key_info.id);
+
+    // 提取客户端 IP
+    let client_ip = extract_client_ip(&headers, Some(&ConnectInfo(addr)));
 
     tracing::info!(
         model = %payload.model,
@@ -323,6 +354,7 @@ pub async fn post_messages(
             state.token_usage_tracker.clone(),
             api_key_id,
             key_info.bound_credential_ids.clone(),
+            client_ip,
         )
         .await
     } else {
@@ -335,6 +367,7 @@ pub async fn post_messages(
             state.token_usage_tracker.clone(),
             api_key_id,
             key_info.bound_credential_ids.clone(),
+            client_ip,
         )
         .await
     }
@@ -350,6 +383,7 @@ async fn handle_stream_request(
     token_usage_tracker: Option<Arc<TokenUsageTracker>>,
     api_key_id: Option<u64>,
     bound_credential_ids: Option<Vec<u64>>,
+    client_ip: Option<String>,
 ) -> Response {
     // 调用 Kiro API（支持多凭据故障转移）
     let api_response = match provider.call_api_stream(request_body, bound_credential_ids.as_deref()).await {
@@ -370,7 +404,7 @@ async fn handle_stream_request(
     let initial_events = ctx.generate_initial_events();
 
     // 创建 SSE 流（使用实际模型名称进行统计）
-    let stream = create_sse_stream(api_response.response, ctx, initial_events, token_usage_tracker, actual_model.to_string(), credential_id, api_key_id);
+    let stream = create_sse_stream(api_response.response, ctx, initial_events, token_usage_tracker, actual_model.to_string(), credential_id, api_key_id, client_ip);
 
     // 返回 SSE 响应
     Response::builder()
@@ -399,6 +433,7 @@ fn create_sse_stream(
     model: String,
     credential_id: u64,
     api_key_id: Option<u64>,
+    client_ip: Option<String>,
 ) -> impl Stream<Item = Result<Bytes, Infallible>> {
     // 先发送初始事件
     let initial_stream = stream::iter(
@@ -415,6 +450,7 @@ fn create_sse_stream(
         move |(mut body_stream, mut ctx, mut decoder, finished, mut ping_interval)| {
             let tracker = token_usage_tracker.clone();
             let model = model.clone();
+            let client_ip = client_ip.clone();
             async move {
                 if finished {
                     return None;
@@ -459,7 +495,7 @@ fn create_sse_stream(
                                 // 记录 token 使用量
                                 if let Some(ref tracker) = tracker {
                                     let final_input = ctx.context_input_tokens.unwrap_or(ctx.input_tokens);
-                                    tracker.record(model.clone(), credential_id, final_input, ctx.output_tokens, api_key_id);
+                                    tracker.record(model.clone(), credential_id, final_input, ctx.output_tokens, api_key_id, client_ip.clone());
                                 }
                                 // 发送最终事件并结束
                                 let final_events = ctx.generate_final_events();
@@ -473,7 +509,7 @@ fn create_sse_stream(
                                 // 记录 token 使用量
                                 if let Some(ref tracker) = tracker {
                                     let final_input = ctx.context_input_tokens.unwrap_or(ctx.input_tokens);
-                                    tracker.record(model.clone(), credential_id, final_input, ctx.output_tokens, api_key_id);
+                                    tracker.record(model.clone(), credential_id, final_input, ctx.output_tokens, api_key_id, client_ip.clone());
                                 }
                                 // 流结束，发送最终事件
                                 let final_events = ctx.generate_final_events();
@@ -512,6 +548,7 @@ async fn handle_non_stream_request(
     token_usage_tracker: Option<Arc<TokenUsageTracker>>,
     api_key_id: Option<u64>,
     bound_credential_ids: Option<Vec<u64>>,
+    client_ip: Option<String>,
 ) -> Response {
     // 调用 Kiro API（支持多凭据故障转移）
     let api_response = match provider.call_api(request_body, bound_credential_ids.as_deref()).await {
@@ -659,6 +696,7 @@ async fn handle_non_stream_request(
             final_input_tokens,
             output_tokens,
             api_key_id,
+            client_ip,
         );
     }
 
@@ -750,6 +788,8 @@ pub async fn count_tokens(
 pub async fn post_messages_cc(
     State(state): State<AppState>,
     Extension(key_info): Extension<ApiKeyInfo>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     JsonExtractor(mut payload): JsonExtractor<MessagesRequest>,
 ) -> Response {
     // 权限检查：只读 Key 不允许创建消息
@@ -779,6 +819,9 @@ pub async fn post_messages_cc(
     }
 
     let api_key_id = Some(key_info.id);
+
+    // 提取客户端 IP
+    let client_ip = extract_client_ip(&headers, Some(&ConnectInfo(addr)));
 
     tracing::info!(
         model = %payload.model,
@@ -892,6 +935,7 @@ pub async fn post_messages_cc(
             state.token_usage_tracker.clone(),
             api_key_id,
             key_info.bound_credential_ids.clone(),
+            client_ip,
         )
         .await
     } else {
@@ -904,6 +948,7 @@ pub async fn post_messages_cc(
             state.token_usage_tracker.clone(),
             api_key_id,
             key_info.bound_credential_ids.clone(),
+            client_ip,
         )
         .await
     }
@@ -922,6 +967,7 @@ async fn handle_stream_request_buffered(
     token_usage_tracker: Option<Arc<TokenUsageTracker>>,
     api_key_id: Option<u64>,
     bound_credential_ids: Option<Vec<u64>>,
+    client_ip: Option<String>,
 ) -> Response {
     // 调用 Kiro API（支持多凭据故障转移）
     let api_response = match provider.call_api_stream(request_body, bound_credential_ids.as_deref()).await {
@@ -939,7 +985,7 @@ async fn handle_stream_request_buffered(
     let ctx = BufferedStreamContext::new(model, estimated_input_tokens, thinking_enabled);
 
     // 创建缓冲 SSE 流（使用实际模型名称进行统计）
-    let stream = create_buffered_sse_stream(api_response.response, ctx, token_usage_tracker, actual_model.to_string(), credential_id, api_key_id);
+    let stream = create_buffered_sse_stream(api_response.response, ctx, token_usage_tracker, actual_model.to_string(), credential_id, api_key_id, client_ip);
 
     // 返回 SSE 响应
     Response::builder()
@@ -965,6 +1011,7 @@ fn create_buffered_sse_stream(
     model: String,
     credential_id: u64,
     api_key_id: Option<u64>,
+    client_ip: Option<String>,
 ) -> impl Stream<Item = Result<Bytes, Infallible>> {
     let body_stream = response.bytes_stream();
 
@@ -979,6 +1026,7 @@ fn create_buffered_sse_stream(
         move |(mut body_stream, mut ctx, mut decoder, finished, mut ping_interval)| {
             let tracker = token_usage_tracker.clone();
             let model = model.clone();
+            let client_ip = client_ip.clone();
             async move {
                 if finished {
                     return None;
@@ -1026,7 +1074,7 @@ fn create_buffered_sse_stream(
                                     // 记录 token 使用量
                                     if let Some(ref tracker) = tracker {
                                         let (final_input, output) = ctx.token_stats();
-                                        tracker.record(model.clone(), credential_id, final_input, output, api_key_id);
+                                        tracker.record(model.clone(), credential_id, final_input, output, api_key_id, client_ip.clone());
                                     }
                                     // 发生错误，完成处理并返回所有事件
                                     let all_events = ctx.finish_and_get_all_events();
@@ -1040,7 +1088,7 @@ fn create_buffered_sse_stream(
                                     // 记录 token 使用量
                                     if let Some(ref tracker) = tracker {
                                         let (final_input, output) = ctx.token_stats();
-                                        tracker.record(model.clone(), credential_id, final_input, output, api_key_id);
+                                        tracker.record(model.clone(), credential_id, final_input, output, api_key_id, client_ip.clone());
                                     }
                                     // 流结束，完成处理并返回所有事件（已更正 input_tokens）
                                     let all_events = ctx.finish_and_get_all_events();

@@ -233,6 +233,7 @@ async fn test_anthropic(state: &UserApiState) -> Json<ConnectivityTestResponse> 
         final_input,
         output_tokens,
         None, // 测试请求不关联 API Key
+        None, // 测试请求不记录 client_ip
     );
 
     Json(ConnectivityTestResponse {

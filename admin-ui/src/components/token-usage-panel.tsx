@@ -411,7 +411,8 @@ export function TokenUsagePanel() {
                           <th className="text-right py-1 sm:py-1.5 pr-3 font-medium whitespace-nowrap">输入</th>
                           <th className="text-right py-1 sm:py-1.5 pr-3 font-medium whitespace-nowrap">输出</th>
                           <th className="text-center py-1 sm:py-1.5 pr-3 font-medium whitespace-nowrap">Key</th>
-                          <th className="text-right py-1 sm:py-1.5 font-medium whitespace-nowrap">凭据</th>
+                          <th className="text-right py-1 sm:py-1.5 pr-3 font-medium whitespace-nowrap">凭据</th>
+                          <th className="text-left py-1 sm:py-1.5 font-medium whitespace-nowrap">IP</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -433,7 +434,10 @@ export function TokenUsagePanel() {
                                   <span className="text-muted-foreground">-</span>
                                 )}
                               </td>
-                              <td className="py-1 sm:py-1.5 text-right whitespace-nowrap">#{req.credentialId}</td>
+                              <td className="py-1 sm:py-1.5 pr-3 text-right whitespace-nowrap">#{req.credentialId}</td>
+                              <td className="py-1 sm:py-1.5 text-muted-foreground whitespace-nowrap font-mono text-[10px] sm:text-xs">
+                                {req.clientIp || '-'}
+                              </td>
                             </tr>
                           )
                         })}
