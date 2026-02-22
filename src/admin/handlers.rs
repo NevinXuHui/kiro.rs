@@ -524,8 +524,6 @@ pub async fn set_proxy_config(
 pub async fn get_logs(
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
-    use std::process::Command;
-
     let lines = params
         .get("lines")
         .and_then(|s| s.parse::<usize>().ok())
@@ -571,70 +569,62 @@ pub async fn get_logs(
         Err(_) => "logs/kiro.log".to_string(),
     };
 
-    // 使用 tail 命令获取最新日志
-    let output = Command::new("tail")
-        .arg("-n")
-        .arg(lines.to_string())
-        .arg(&log_path)
-        .output();
-
-    match output {
-        Ok(output) if output.status.success() => {
-            let content = String::from_utf8_lossy(&output.stdout).to_string();
-
-            // 将 UTC 时间转换为本地时间（CST +8）
-            let local_content = convert_utc_to_local(&content);
-
-            // 根据日志级别过滤
-            let filtered_content = filter_by_level(&local_content, level);
-
-            // 分页处理
-            let all_lines: Vec<&str> = filtered_content.lines().collect();
-            let total_lines = all_lines.len();
-            let total_pages = (total_lines + page_size - 1) / page_size;
-
-            let start_idx = (page - 1) * page_size;
-            let end_idx = std::cmp::min(start_idx + page_size, total_lines);
-
-            let page_lines: Vec<&str> = if start_idx < total_lines {
-                all_lines[start_idx..end_idx].to_vec()
+    // 读取日志文件内容
+    let content = match std::fs::read_to_string(&log_path) {
+        Ok(content) => {
+            // 获取最后 N 行
+            let all_lines: Vec<&str> = content.lines().collect();
+            let start_idx = if all_lines.len() > lines {
+                all_lines.len() - lines
             } else {
-                Vec::new()
+                0
             };
-
-            let page_content = page_lines.join("\n");
-
-            Json(serde_json::json!({
-                "success": true,
-                "content": page_content,
-                "lines": page_lines.len(),
-                "totalLines": total_lines,
-                "page": page,
-                "pageSize": page_size,
-                "totalPages": total_pages
-            }))
-            .into_response()
+            all_lines[start_idx..].join("\n")
         }
-        Ok(output) => {
-            let error = String::from_utf8_lossy(&output.stderr).to_string();
-            (
+        Err(e) => {
+            return (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 Json(super::types::AdminErrorResponse::internal_error(&format!(
-                    "读取日志失败: {}",
-                    error
+                    "读取日志文件失败: {}",
+                    e
                 ))),
             )
-                .into_response()
+                .into_response();
         }
-        Err(e) => (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            Json(super::types::AdminErrorResponse::internal_error(&format!(
-                "执行命令失败: {}",
-                e
-            ))),
-        )
-            .into_response(),
-    }
+    };
+
+    // 将 UTC 时间转换为本地时间（CST +8）
+    let local_content = convert_utc_to_local(&content);
+
+    // 根据日志级别过滤
+    let filtered_content = filter_by_level(&local_content, level);
+
+    // 分页处理
+    let all_lines: Vec<&str> = filtered_content.lines().collect();
+    let total_lines = all_lines.len();
+    let total_pages = (total_lines + page_size - 1) / page_size;
+
+    let start_idx = (page - 1) * page_size;
+    let end_idx = std::cmp::min(start_idx + page_size, total_lines);
+
+    let page_lines: Vec<&str> = if start_idx < total_lines {
+        all_lines[start_idx..end_idx].to_vec()
+    } else {
+        Vec::new()
+    };
+
+    let page_content = page_lines.join("\n");
+
+    Json(serde_json::json!({
+        "success": true,
+        "content": page_content,
+        "lines": page_lines.len(),
+        "totalLines": total_lines,
+        "page": page,
+        "pageSize": page_size,
+        "totalPages": total_pages
+    }))
+    .into_response()
 }
 
 /// 根据日志级别过滤
@@ -1018,7 +1008,18 @@ pub async fn save_sync_config(
                     )
                         .into_response();
                 }
-                
+
+                // 热更新 sync_manager 配置
+                if let Some(sync_manager) = &state.sync_manager {
+                    if let Some(sync_config) = &config.sync_config {
+                        if let Err(e) = sync_manager.update_config(sync_config.clone()) {
+                            tracing::warn!("更新同步管理器配置失败: {}", e);
+                        } else {
+                            tracing::info!("同步配置已热更新: enabled={}", enabled);
+                        }
+                    }
+                }
+
                 tracing::info!("同步配置已保存");
                 Json(SuccessResponse::new("配置保存成功")).into_response()
             }
