@@ -5,8 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useTokenUsage, useResetTokenUsage, useApiKeys, useTokenUsageTimeseries } from '@/hooks/use-credentials'
 import { formatNumber } from '@/lib/utils'
+import type { TokenUsageRecord } from '@/types/api'
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -209,6 +211,8 @@ export function TokenUsagePanel() {
   const [pageSize, setPageSize] = useState(getStoredPageSize)
   const [timeDimension, setTimeDimension] = useState<'hour' | 'day' | 'week'>('day')
   const [activeSubTab, setActiveSubTab] = useState<'chart' | 'ranking' | 'requests'>('requests')
+  const [selectedRecord, setSelectedRecord] = useState<TokenUsageRecord | null>(null)
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false)
 
   // 创建 API Key ID 到标签的映射
   const apiKeyMap = new Map(apiKeys?.map(key => [key.id, key.label]) || [])
@@ -411,8 +415,7 @@ export function TokenUsagePanel() {
                           <th className="text-right py-1 sm:py-1.5 pr-3 font-medium whitespace-nowrap">输入</th>
                           <th className="text-right py-1 sm:py-1.5 pr-3 font-medium whitespace-nowrap">输出</th>
                           <th className="text-center py-1 sm:py-1.5 pr-3 font-medium whitespace-nowrap">Key</th>
-                          <th className="text-right py-1 sm:py-1.5 pr-3 font-medium whitespace-nowrap">凭据</th>
-                          <th className="text-left py-1 sm:py-1.5 font-medium whitespace-nowrap">IP</th>
+                          <th className="text-right py-1 sm:py-1.5 font-medium whitespace-nowrap">凭据</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -422,7 +425,14 @@ export function TokenUsagePanel() {
                           const apiKeyLabel = req.apiKeyId ? apiKeyMap.get(req.apiKeyId) : null
                           const keyColor = getKeyColor(req.apiKeyId)
                           return (
-                            <tr key={idx} className="border-b last:border-0">
+                            <tr
+                              key={idx}
+                              className="border-b last:border-0 hover:bg-muted/50 cursor-pointer transition-colors"
+                              onClick={() => {
+                                setSelectedRecord(req)
+                                setDetailDialogOpen(true)
+                              }}
+                            >
                               <td className="py-1 sm:py-1.5 pr-3 text-muted-foreground whitespace-nowrap">{timeStr}</td>
                               <td className="py-1 sm:py-1.5 pr-3 whitespace-nowrap" title={req.model}>{req.model}</td>
                               <td className="py-1 sm:py-1.5 pr-3 text-right text-blue-600 whitespace-nowrap">{formatNumber(req.inputTokens)}</td>
@@ -434,10 +444,7 @@ export function TokenUsagePanel() {
                                   <span className="text-muted-foreground">-</span>
                                 )}
                               </td>
-                              <td className="py-1 sm:py-1.5 pr-3 text-right whitespace-nowrap">#{req.credentialId}</td>
-                              <td className="py-1 sm:py-1.5 text-muted-foreground whitespace-nowrap font-mono text-[10px] sm:text-xs">
-                                {req.clientIp || '-'}
-                              </td>
+                              <td className="py-1 sm:py-1.5 text-right whitespace-nowrap">#{req.credentialId}</td>
                             </tr>
                           )
                         })}
@@ -611,6 +618,103 @@ export function TokenUsagePanel() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* 请求详情对话框 */}
+      <Dialog open={detailDialogOpen} onOpenChange={setDetailDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>请求详情</DialogTitle>
+          </DialogHeader>
+          {selectedRecord && (
+            <div className="space-y-4">
+              {/* 基本信息 */}
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <div className="text-muted-foreground mb-1">请求时间</div>
+                  <div className="font-mono">
+                    {new Date(selectedRecord.timestamp).toLocaleString('zh-CN', {
+                      year: 'numeric',
+                      month: '2-digit',
+                      day: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                      hour12: false
+                    })}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground mb-1">模型</div>
+                  <div className="font-medium">{selectedRecord.model}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground mb-1">输入 Tokens</div>
+                  <div className="text-blue-600 font-semibold">
+                    <ArrowDownToLine className="inline h-4 w-4 mr-1" />
+                    {formatNumber(selectedRecord.inputTokens)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground mb-1">输出 Tokens</div>
+                  <div className="text-green-600 font-semibold">
+                    <ArrowUpFromLine className="inline h-4 w-4 mr-1" />
+                    {formatNumber(selectedRecord.outputTokens)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground mb-1">API Key</div>
+                  <div>
+                    {selectedRecord.apiKeyId ? (
+                      <Badge className={`${getKeyColor(selectedRecord.apiKeyId)} text-white border-0`}>
+                        {apiKeyMap.get(selectedRecord.apiKeyId) || `Key #${selectedRecord.apiKeyId}`}
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground">-</span>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground mb-1">凭据 ID</div>
+                  <div className="font-mono">#{selectedRecord.credentialId}</div>
+                </div>
+                {selectedRecord.clientIp && (
+                  <div className="col-span-2">
+                    <div className="text-muted-foreground mb-1">客户端 IP</div>
+                    <div className="font-mono text-sm bg-muted px-3 py-2 rounded">
+                      {selectedRecord.clientIp}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 统计信息 */}
+              <div className="border-t pt-4">
+                <div className="text-sm font-medium mb-2">统计信息</div>
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div className="bg-muted/50 rounded p-3">
+                    <div className="text-2xl font-bold">
+                      {formatNumber(selectedRecord.inputTokens + selectedRecord.outputTokens)}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">总 Tokens</div>
+                  </div>
+                  <div className="bg-blue-50 dark:bg-blue-950/30 rounded p-3">
+                    <div className="text-2xl font-bold text-blue-600">
+                      {formatNumber(selectedRecord.inputTokens)}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">输入</div>
+                  </div>
+                  <div className="bg-green-50 dark:bg-green-950/30 rounded p-3">
+                    <div className="text-2xl font-bold text-green-600">
+                      {formatNumber(selectedRecord.outputTokens)}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">输出</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
