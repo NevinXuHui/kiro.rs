@@ -2,9 +2,11 @@
 
 use axum::{
     Json,
-    extract::{Path, Query, State},
+    extract::{Path, Query, State, ConnectInfo},
+    http::HeaderMap,
     response::IntoResponse,
 };
+use std::net::SocketAddr;
 
 use super::{
     middleware::AdminState,
@@ -15,6 +17,23 @@ use super::{
         UpdateApiKeyRequest, UpdateProxyConfigRequest,
     },
 };
+
+/// 提取客户端 IP 地址（从 anthropic handlers 复制）
+fn extract_client_ip(headers: &HeaderMap, connect_info: Option<&ConnectInfo<SocketAddr>>) -> Option<String> {
+    if let Some(forwarded) = headers.get("x-forwarded-for") {
+        if let Ok(value) = forwarded.to_str() {
+            if let Some(first_ip) = value.split(',').next() {
+                return Some(first_ip.trim().to_string());
+            }
+        }
+    }
+    if let Some(real_ip) = headers.get("x-real-ip") {
+        if let Ok(value) = real_ip.to_str() {
+            return Some(value.to_string());
+        }
+    }
+    connect_info.map(|info| info.0.ip().to_string())
+}
 
 /// GET /api/admin/credentials
 /// 获取所有凭据状态
@@ -693,10 +712,14 @@ fn convert_utc_to_local(content: &str) -> String {
 /// 测试 API 接口连通性
 pub async fn test_connectivity(
     State(state): State<AdminState>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Json(payload): Json<ConnectivityTestRequest>,
 ) -> impl IntoResponse {
+    let client_ip = extract_client_ip(&headers, Some(&ConnectInfo(addr)));
+
     match payload.mode.as_str() {
-        "anthropic" => test_anthropic_connectivity(&state, payload.model).await.into_response(),
+        "anthropic" => test_anthropic_connectivity(&state, payload.model, client_ip).await.into_response(),
         "openai" => {
             Json(ConnectivityTestResponse {
                 success: false,
@@ -722,7 +745,7 @@ pub async fn test_connectivity(
 }
 
 /// Anthropic 模式连通性测试
-async fn test_anthropic_connectivity(state: &AdminState, model: Option<String>) -> Json<ConnectivityTestResponse> {
+async fn test_anthropic_connectivity(state: &AdminState, model: Option<String>, client_ip: Option<String>) -> Json<ConnectivityTestResponse> {
     let Some(provider) = &state.kiro_provider else {
         return Json(ConnectivityTestResponse {
             success: false,
@@ -888,7 +911,7 @@ async fn test_anthropic_connectivity(state: &AdminState, model: Option<String>) 
             final_input,
             output_tokens,
             None, // 测试请求不关联 API Key
-            None, // 测试请求不记录 client_ip
+            client_ip, // 记录客户端 IP
         );
     }
 

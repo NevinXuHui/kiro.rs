@@ -2,11 +2,12 @@
 
 use axum::{
     Json,
-    extract::State,
+    extract::{State, ConnectInfo},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
 };
 use serde::Serialize;
+use std::net::SocketAddr;
 
 use crate::admin::types::{ConnectivityTestRequest, ConnectivityTestResponse};
 
@@ -17,6 +18,23 @@ use super::router::UserApiState;
 struct ErrorResponse {
     error: &'static str,
     message: &'static str,
+}
+
+/// 提取客户端 IP 地址
+fn extract_client_ip(headers: &HeaderMap, connect_info: Option<&ConnectInfo<SocketAddr>>) -> Option<String> {
+    if let Some(forwarded) = headers.get("x-forwarded-for") {
+        if let Ok(value) = forwarded.to_str() {
+            if let Some(first_ip) = value.split(',').next() {
+                return Some(first_ip.trim().to_string());
+            }
+        }
+    }
+    if let Some(real_ip) = headers.get("x-real-ip") {
+        if let Ok(value) = real_ip.to_str() {
+            return Some(value.to_string());
+        }
+    }
+    connect_info.map(|info| info.0.ip().to_string())
 }
 
 /// 从请求头提取 API Key（支持 x-api-key 和 Bearer token）
@@ -75,6 +93,7 @@ pub async fn get_user_usage(
 /// 连通性测试，逻辑与 Admin API 一致。
 pub async fn test_connectivity(
     State(state): State<UserApiState>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     Json(payload): Json<ConnectivityTestRequest>,
 ) -> impl IntoResponse {
@@ -83,8 +102,10 @@ pub async fn test_connectivity(
         return resp;
     }
 
+    let client_ip = extract_client_ip(&headers, Some(&ConnectInfo(addr)));
+
     match payload.mode.as_str() {
-        "anthropic" => test_anthropic(&state).await.into_response(),
+        "anthropic" => test_anthropic(&state, client_ip).await.into_response(),
         "openai" => Json(ConnectivityTestResponse {
             success: false,
             mode: "openai".to_string(),
@@ -104,7 +125,7 @@ pub async fn test_connectivity(
 }
 
 /// Anthropic 模式连通性测试（与 admin 逻辑一致）
-async fn test_anthropic(state: &UserApiState) -> Json<ConnectivityTestResponse> {
+async fn test_anthropic(state: &UserApiState, client_ip: Option<String>) -> Json<ConnectivityTestResponse> {
     let Some(provider) = &state.kiro_provider else {
         return Json(ConnectivityTestResponse {
             success: false, mode: "anthropic".to_string(), latency_ms: 0,
@@ -233,7 +254,7 @@ async fn test_anthropic(state: &UserApiState) -> Json<ConnectivityTestResponse> 
         final_input,
         output_tokens,
         None, // 测试请求不关联 API Key
-        None, // 测试请求不记录 client_ip
+        client_ip, // 记录客户端 IP
     );
 
     Json(ConnectivityTestResponse {
