@@ -306,6 +306,7 @@ pub struct UpdateApiKeyRequest {
     pub read_only: Option<bool>,
     pub allowed_models: Option<Option<Vec<String>>>,
     pub disabled: Option<bool>,
+    pub bound_credential_ids: Option<Option<Vec<u64>>>,
 }
 
 /// 错误响应

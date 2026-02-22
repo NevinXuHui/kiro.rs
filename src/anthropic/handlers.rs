@@ -322,6 +322,7 @@ pub async fn post_messages(
             thinking_enabled,
             state.token_usage_tracker.clone(),
             api_key_id,
+            key_info.bound_credential_ids.clone(),
         )
         .await
     } else {
@@ -333,6 +334,7 @@ pub async fn post_messages(
             input_tokens,
             state.token_usage_tracker.clone(),
             api_key_id,
+            key_info.bound_credential_ids.clone(),
         )
         .await
     }
@@ -347,9 +349,10 @@ async fn handle_stream_request(
     thinking_enabled: bool,
     token_usage_tracker: Option<Arc<TokenUsageTracker>>,
     api_key_id: Option<u64>,
+    bound_credential_ids: Option<Vec<u64>>,
 ) -> Response {
     // 调用 Kiro API（支持多凭据故障转移）
-    let api_response = match provider.call_api_stream(request_body).await {
+    let api_response = match provider.call_api_stream(request_body, bound_credential_ids.as_deref()).await {
         Ok(resp) => resp,
         Err(e) => return map_provider_error(e),
     };
@@ -508,9 +511,10 @@ async fn handle_non_stream_request(
     input_tokens: i32,
     token_usage_tracker: Option<Arc<TokenUsageTracker>>,
     api_key_id: Option<u64>,
+    bound_credential_ids: Option<Vec<u64>>,
 ) -> Response {
     // 调用 Kiro API（支持多凭据故障转移）
-    let api_response = match provider.call_api(request_body).await {
+    let api_response = match provider.call_api(request_body, bound_credential_ids.as_deref()).await {
         Ok(resp) => resp,
         Err(e) => return map_provider_error(e),
     };
@@ -887,6 +891,7 @@ pub async fn post_messages_cc(
             thinking_enabled,
             state.token_usage_tracker.clone(),
             api_key_id,
+            key_info.bound_credential_ids.clone(),
         )
         .await
     } else {
@@ -898,6 +903,7 @@ pub async fn post_messages_cc(
             input_tokens,
             state.token_usage_tracker.clone(),
             api_key_id,
+            key_info.bound_credential_ids.clone(),
         )
         .await
     }
@@ -915,9 +921,10 @@ async fn handle_stream_request_buffered(
     thinking_enabled: bool,
     token_usage_tracker: Option<Arc<TokenUsageTracker>>,
     api_key_id: Option<u64>,
+    bound_credential_ids: Option<Vec<u64>>,
 ) -> Response {
     // 调用 Kiro API（支持多凭据故障转移）
-    let api_response = match provider.call_api_stream(request_body).await {
+    let api_response = match provider.call_api_stream(request_body, bound_credential_ids.as_deref()).await {
         Ok(resp) => resp,
         Err(e) => return map_provider_error(e),
     };

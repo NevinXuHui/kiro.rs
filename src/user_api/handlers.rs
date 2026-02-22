@@ -157,7 +157,7 @@ async fn test_anthropic(state: &UserApiState) -> Json<ConnectivityTestResponse> 
 
     let result = tokio::time::timeout(
         std::time::Duration::from_secs(30),
-        provider.call_api(&request_body),
+        provider.call_api(&request_body, None),
     ).await;
 
     let latency_ms = start.elapsed().as_millis() as u64;

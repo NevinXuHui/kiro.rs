@@ -324,6 +324,7 @@ pub async fn update_api_key(
                 payload.read_only,
                 payload.allowed_models,
                 payload.disabled,
+                payload.bound_credential_ids,
             ) {
                 Ok(_) => {
                     Json(SuccessResponse::new(format!("API Key #{} 已更新", id))).into_response()
@@ -801,7 +802,7 @@ async fn test_anthropic_connectivity(state: &AdminState, model: Option<String>) 
     // 带超时的 API 调用
     let result = tokio::time::timeout(
         std::time::Duration::from_secs(30),
-        provider.call_api(&request_body),
+        provider.call_api(&request_body, None),
     )
     .await;
 

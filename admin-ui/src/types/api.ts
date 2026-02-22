@@ -139,6 +139,7 @@ export interface ApiKeyEntryView {
   readOnly: boolean
   allowedModels: string[] | null
   disabled: boolean
+  boundCredentialIds: number[] | null
   createdAt: string
 }
 
@@ -148,6 +149,7 @@ export interface CreateApiKeyRequest {
   label: string
   readOnly?: boolean
   allowedModels?: string[]
+  boundCredentialIds?: number[]
 }
 
 // 创建 API Key 响应
@@ -165,6 +167,7 @@ export interface UpdateApiKeyRequest {
   readOnly?: boolean
   allowedModels?: string[] | null
   disabled?: boolean
+  boundCredentialIds?: number[] | null
 }
 
 // ============ 代理配置 ============

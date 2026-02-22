@@ -290,11 +290,12 @@ impl KiroProvider {
     ///
     /// # Arguments
     /// * `request_body` - JSON 格式的请求体字符串
+    /// * `bound_credential_ids` - 可选的凭据 ID 列表，用于限制只使用指定的凭据（API Key 绑定）
     ///
     /// # Returns
     /// 返回原始的 HTTP Response，不做解析
-    pub async fn call_api(&self, request_body: &str) -> anyhow::Result<ApiResponse> {
-        self.call_api_with_retry(request_body, false).await
+    pub async fn call_api(&self, request_body: &str, bound_credential_ids: Option<&[u64]>) -> anyhow::Result<ApiResponse> {
+        self.call_api_with_retry(request_body, false, bound_credential_ids).await
     }
 
     /// 发送流式 API 请求
@@ -307,11 +308,12 @@ impl KiroProvider {
     ///
     /// # Arguments
     /// * `request_body` - JSON 格式的请求体字符串
+    /// * `bound_credential_ids` - 可选的凭据 ID 列表，用于限制只使用指定的凭据（API Key 绑定）
     ///
     /// # Returns
     /// 返回原始的 HTTP Response，调用方负责处理流式数据
-    pub async fn call_api_stream(&self, request_body: &str) -> anyhow::Result<ApiResponse> {
-        self.call_api_with_retry(request_body, true).await
+    pub async fn call_api_stream(&self, request_body: &str, bound_credential_ids: Option<&[u64]>) -> anyhow::Result<ApiResponse> {
+        self.call_api_with_retry(request_body, true, bound_credential_ids).await
     }
 
     /// 发送 MCP API 请求
@@ -336,7 +338,7 @@ impl KiroProvider {
         for attempt in 0..max_retries {
             // 获取调用上下文
             // MCP 调用（WebSearch 等工具）不涉及模型选择，无需按模型过滤凭据
-            let ctx = match self.token_manager.acquire_context(None).await {
+            let ctx = match self.token_manager.acquire_context(None, None).await {
                 Ok(c) => c,
                 Err(e) => {
                     last_error = Some(e);
@@ -457,6 +459,7 @@ impl KiroProvider {
         &self,
         request_body: &str,
         is_stream: bool,
+        bound_credential_ids: Option<&[u64]>,
     ) -> anyhow::Result<ApiResponse> {
         let total_credentials = self.token_manager.total_count();
         let max_retries = (total_credentials * MAX_RETRIES_PER_CREDENTIAL).min(MAX_TOTAL_RETRIES);
@@ -519,7 +522,7 @@ impl KiroProvider {
 
         for attempt in 0..max_retries {
             // 获取调用上下文（绑定 index、credentials、token）
-            let ctx = match self.token_manager.acquire_context(model.as_deref()).await {
+            let ctx = match self.token_manager.acquire_context(model.as_deref(), bound_credential_ids).await {
                 Ok(c) => c,
                 Err(e) => {
                     last_error = Some(e);

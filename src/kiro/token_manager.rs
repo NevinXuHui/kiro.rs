@@ -716,7 +716,7 @@ impl MultiTokenManager {
     ///
     /// # 参数
     /// - `model`: 可选的模型名称，用于过滤支持该模型的凭据（如 opus 模型需要付费订阅）
-    fn select_next_credential(&self, model: Option<&str>) -> Option<(u64, KiroCredentials)> {
+    fn select_next_credential(&self, model: Option<&str>, bound_credential_ids: Option<&[u64]>) -> Option<(u64, KiroCredentials)> {
         let entries = self.entries.lock();
 
         // 检查是否是 opus 模型
@@ -730,6 +730,12 @@ impl MultiTokenManager {
             .filter(|e| {
                 if e.disabled {
                     return false;
+                }
+                // 如果指定了绑定的凭据 ID 列表，只使用这些凭据
+                if let Some(bound_ids) = bound_credential_ids {
+                    if !bound_ids.contains(&e.id) {
+                        return false;
+                    }
                 }
                 // 如果是 opus 模型，需要检查订阅等级
                 if is_opus && !e.credentials.supports_opus() {
@@ -774,7 +780,8 @@ impl MultiTokenManager {
     ///
     /// # 参数
     /// - `model`: 可选的模型名称，用于过滤支持该模型的凭据（如 opus 模型需要付费订阅）
-    pub async fn acquire_context(&self, model: Option<&str>) -> anyhow::Result<CallContext> {
+    /// - `bound_credential_ids`: 可选的凭据 ID 列表，用于限制只使用指定的凭据（API Key 绑定）
+    pub async fn acquire_context(&self, model: Option<&str>, bound_credential_ids: Option<&[u64]>) -> anyhow::Result<CallContext> {
         let total = self.total_count();
         let mut tried_count = 0;
 
@@ -807,7 +814,7 @@ impl MultiTokenManager {
                     hit
                 } else {
                     // 当前凭据不可用或 balanced 模式，根据负载均衡策略选择
-                    let mut best = self.select_next_credential(model);
+                    let mut best = self.select_next_credential(model, bound_credential_ids);
 
                     // 没有可用凭据：如果是"自动禁用导致全灭"，做一次类似重启的自愈
                     if best.is_none() {
@@ -826,7 +833,7 @@ impl MultiTokenManager {
                                 }
                             }
                             drop(entries);
-                            best = self.select_next_credential(model);
+                            best = self.select_next_credential(model, bound_credential_ids);
                         }
                     }
 
@@ -1292,7 +1299,7 @@ impl MultiTokenManager {
     /// 获取使用额度信息
     #[allow(dead_code)]
     pub async fn get_usage_limits(&self) -> anyhow::Result<UsageLimitsResponse> {
-        let ctx = self.acquire_context(None).await?;
+        let ctx = self.acquire_context(None, None).await?;
         let global_proxy = self.shared_proxy.get();
         let effective_proxy = ctx.credentials.effective_proxy(global_proxy.as_ref());
         get_usage_limits(

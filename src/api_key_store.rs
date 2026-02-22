@@ -35,6 +35,10 @@ pub struct ApiKeyEntry {
     /// 是否禁用
     #[serde(default)]
     pub disabled: bool,
+    /// 绑定的凭据 ID 列表（None = 使用所有凭据）
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bound_credential_ids: Option<Vec<u64>>,
     /// 创建时间（RFC3339）
     pub created_at: String,
 }
@@ -46,6 +50,7 @@ pub struct ApiKeyInfo {
     pub label: String,
     pub read_only: bool,
     pub allowed_models: Option<Vec<String>>,
+    pub bound_credential_ids: Option<Vec<u64>>,
 }
 
 /// API Key 视图（用于 API 响应，key 脱敏）
@@ -63,6 +68,7 @@ pub struct ApiKeyEntryView {
     pub read_only: bool,
     pub allowed_models: Option<Vec<String>>,
     pub disabled: bool,
+    pub bound_credential_ids: Option<Vec<u64>>,
     pub created_at: String,
 }
 
@@ -126,6 +132,7 @@ impl ApiKeyStore {
                     read_only: false,
                     allowed_models: None,
                     disabled: false,
+                    bound_credential_ids: None,
                     created_at: Utc::now().to_rfc3339(),
                 };
                 store.data.entries.push(entry);
@@ -152,6 +159,7 @@ impl ApiKeyStore {
                     label: entry.label.clone(),
                     read_only: entry.read_only,
                     allowed_models: entry.allowed_models.clone(),
+                    bound_credential_ids: entry.bound_credential_ids.clone(),
                 });
             }
         }
@@ -195,6 +203,7 @@ impl ApiKeyStore {
             read_only,
             allowed_models,
             disabled: false,
+            bound_credential_ids: None,
             created_at: Utc::now().to_rfc3339(),
         };
         self.data.entries.push(entry);
@@ -211,6 +220,7 @@ impl ApiKeyStore {
         read_only: Option<bool>,
         allowed_models: Option<Option<Vec<String>>>,
         disabled: Option<bool>,
+        bound_credential_ids: Option<Option<Vec<u64>>>,
     ) -> Result<(), String> {
         let entry = self
             .data
@@ -236,6 +246,9 @@ impl ApiKeyStore {
         }
         if let Some(d) = disabled {
             entry.disabled = d;
+        }
+        if let Some(b) = bound_credential_ids {
+            entry.bound_credential_ids = b;
         }
 
         self.save();
@@ -285,6 +298,7 @@ impl ApiKeyStore {
             read_only: entry.read_only,
             allowed_models: entry.allowed_models.clone(),
             disabled: entry.disabled,
+            bound_credential_ids: entry.bound_credential_ids.clone(),
             created_at: entry.created_at.clone(),
         }
     }

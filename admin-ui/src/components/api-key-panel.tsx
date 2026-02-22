@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { MultiSelect } from '@/components/ui/multi-select'
-import { useApiKeys, useCreateApiKey, useUpdateApiKey, useDeleteApiKey, useTokenUsage } from '@/hooks/use-credentials'
+import { useApiKeys, useCreateApiKey, useUpdateApiKey, useDeleteApiKey, useTokenUsage, useCredentials } from '@/hooks/use-credentials'
 import { extractErrorMessage, formatNumber } from '@/lib/utils'
 import { SUPPORTED_MODELS } from '@/constants/models'
 import type { ApiKeyEntryView } from '@/types/api'
@@ -27,9 +27,11 @@ export function ApiKeyPanel() {
   const [formReadOnly, setFormReadOnly] = useState(false)
   const [formAllowedModels, setFormAllowedModels] = useState<string[]>([])
   const [formDisabled, setFormDisabled] = useState(false)
+  const [formBoundCredentialIds, setFormBoundCredentialIds] = useState<number[]>([])
 
   const { data: apiKeys, isLoading, error } = useApiKeys()
   const { data: tokenUsage } = useTokenUsage()
+  const { data: credentialsStatus } = useCredentials()
   const createMutation = useCreateApiKey()
   const updateMutation = useUpdateApiKey()
   const deleteMutation = useDeleteApiKey()
@@ -42,6 +44,7 @@ export function ApiKeyPanel() {
     setFormReadOnly(false)
     setFormAllowedModels([])
     setFormDisabled(false)
+    setFormBoundCredentialIds([])
     setNewKeyResult(null)
   }
 
@@ -59,6 +62,7 @@ export function ApiKeyPanel() {
     setFormReadOnly(apiKey.readOnly)
     setFormAllowedModels(apiKey.allowedModels || [])
     setFormDisabled(apiKey.disabled)
+    setFormBoundCredentialIds(apiKey.boundCredentialIds || [])
     setEditDialogOpen(true)
   }
 
@@ -70,6 +74,7 @@ export function ApiKeyPanel() {
     }
 
     const allowedModels = formAllowedModels.length > 0 ? formAllowedModels : undefined
+    const boundCredentialIds = formBoundCredentialIds.length > 0 ? formBoundCredentialIds : undefined
 
     createMutation.mutate(
       {
@@ -77,6 +82,7 @@ export function ApiKeyPanel() {
         key: formKey.trim() || undefined,
         readOnly: formReadOnly,
         allowedModels,
+        boundCredentialIds,
       },
       {
         onSuccess: (res) => {
@@ -99,6 +105,7 @@ export function ApiKeyPanel() {
     }
 
     const allowedModels = formAllowedModels.length > 0 ? formAllowedModels : null
+    const boundCredentialIds = formBoundCredentialIds.length > 0 ? formBoundCredentialIds : null
 
     updateMutation.mutate(
       {
@@ -108,6 +115,7 @@ export function ApiKeyPanel() {
         readOnly: formReadOnly,
         allowedModels,
         disabled: formDisabled,
+        boundCredentialIds,
       },
       {
         onSuccess: () => {
@@ -395,6 +403,18 @@ export function ApiKeyPanel() {
                   placeholder="选择允许的模型..."
                 />
               </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">绑定凭据（可选，留空使用所有凭据）</label>
+                <MultiSelect
+                  options={credentialsStatus?.credentials.map((c: any) => ({
+                    value: String(c.id),
+                    label: c.email || `凭据 #${c.id}`
+                  })) || []}
+                  value={formBoundCredentialIds.map(String)}
+                  onChange={(values) => setFormBoundCredentialIds(values.map(Number))}
+                  placeholder="选择绑定的凭据..."
+                />
+              </div>
               <DialogFooter>
                 <Button variant="outline" onClick={closeCreateDialog}>
                   取消
@@ -442,6 +462,18 @@ export function ApiKeyPanel() {
                 value={formAllowedModels}
                 onChange={setFormAllowedModels}
                 placeholder="选择允许的模型..."
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">绑定凭据（可选，留空使用所有凭据）</label>
+              <MultiSelect
+                options={credentialsStatus?.credentials.map(c => ({
+                  value: String(c.id),
+                  label: c.email || `凭据 #${c.id}`
+                })) || []}
+                value={formBoundCredentialIds.map(String)}
+                onChange={(values) => setFormBoundCredentialIds(values.map(Number))}
+                placeholder="选择绑定的凭据..."
               />
             </div>
             <div className="flex items-center justify-between">
