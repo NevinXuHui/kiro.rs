@@ -19,7 +19,9 @@ interface BatchImportDialogProps {
 }
 
 interface CredentialInput {
+  email?: string
   refreshToken: string
+  accessToken?: string
   clientId?: string
   clientSecret?: string
   region?: string
@@ -27,6 +29,8 @@ interface CredentialInput {
   apiRegion?: string
   priority?: number
   machineId?: string
+  authMethod?: string
+  provider?: string
 }
 
 interface VerificationResult {
@@ -223,6 +227,7 @@ export function BatchImportDialog({ open, onOpenChange }: BatchImportDialogProps
             clientSecret,
             priority: cred.priority || 0,
             machineId: cred.machineId?.trim() || undefined,
+            email: cred.email?.trim() || undefined,
           })
 
           addedCredId = addedCred.credentialId
@@ -362,7 +367,7 @@ export function BatchImportDialog({ open, onOpenChange }: BatchImportDialogProps
               JSON 格式凭据
             </label>
             <textarea
-              placeholder={'粘贴 JSON 格式的凭据，支持以下格式：\n\n1. JSON 数组: [{"refreshToken":"...","clientId":"...","clientSecret":"...","authRegion":"us-east-1","apiRegion":"us-west-2"}, ...]\n2. 单个对象: {"refreshToken":"...","clientId":"...","clientSecret":"...","authRegion":"us-east-1"}\n3. 每行一个 JSON 对象（NDJSON）:\n{"refreshToken":"...","clientId":"...","clientSecret":"..."}\n{"refreshToken":"...","clientId":"...","clientSecret":"..."}\n\n支持 region 字段自动映射为 authRegion'}
+              placeholder={'粘贴 JSON 格式的凭据，支持以下格式：\n\n1. JSON 数组: [{"email":"user@example.com","refreshToken":"...","clientId":"...","clientSecret":"...","authRegion":"us-east-1","apiRegion":"us-west-2"}, ...]\n2. 单个对象: {"email":"user@example.com","refreshToken":"...","clientId":"...","clientSecret":"...","authRegion":"us-east-1"}\n3. 每行一个 JSON 对象（NDJSON）:\n{"email":"user@example.com","refreshToken":"...","clientId":"...","clientSecret":"..."}\n{"email":"user2@example.com","refreshToken":"...","clientId":"...","clientSecret":"..."}\n\n支持字段：email, refreshToken, accessToken, clientId, clientSecret, region/authRegion, apiRegion, authMethod, provider, priority, machineId'}
               value={jsonInput}
               onChange={(e) => setJsonInput(e.target.value)}
               disabled={importing}
