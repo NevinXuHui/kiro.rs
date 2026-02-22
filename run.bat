@@ -76,8 +76,9 @@ if not exist %CONFIG_FILE% (
 )
 
 if not exist %CREDENTIALS_FILE% (
-    echo Error: credentials.json not found
-    exit /b 1
+    echo Warning: %CREDENTIALS_FILE% not found, creating empty credentials file...
+    echo [] > %CREDENTIALS_FILE%
+    echo Created %CREDENTIALS_FILE%
 )
 
 REM Clear proxy environment variables to avoid using proxy for internal network
