@@ -85,9 +85,9 @@ export async function resetCredentialFailure(
   return data
 }
 
-// 获取凭据余额（强制跳过后端缓存）
-export async function getCredentialBalance(id: number): Promise<BalanceResponse> {
-  const { data } = await api.get<BalanceResponse>(`/credentials/${id}/balance?force=true`)
+// 获取凭据余额（默认使用服务器缓存）
+export async function getCredentialBalance(id: number, force = false): Promise<BalanceResponse> {
+  const { data } = await api.get<BalanceResponse>(`/credentials/${id}/balance${force ? '?force=true' : ''}`)
   return data
 }
 

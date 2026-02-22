@@ -28,7 +28,6 @@ interface DashboardProps {
 }
 
 export function Dashboard({ onLogout }: DashboardProps) {
-  const [selectedCredentialId, setSelectedCredentialId] = useState<number | null>(null)
   const [balanceDialogOpen, setBalanceDialogOpen] = useState(false)
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [batchImportDialogOpen, setBatchImportDialogOpen] = useState(false)
@@ -37,7 +36,19 @@ export function Dashboard({ onLogout }: DashboardProps) {
   const [verifying, setVerifying] = useState(false)
   const [verifyProgress, setVerifyProgress] = useState({ current: 0, total: 0 })
   const [verifyResults, setVerifyResults] = useState<Map<number, VerifyResult>>(new Map())
-  const [balanceMap, setBalanceMap] = useState<Map<number, BalanceResponse>>(new Map())
+  const [balanceMap, setBalanceMap] = useState<Map<number, BalanceResponse>>(() => {
+    // 从 localStorage 加载缓存的余额数据
+    try {
+      const cached = localStorage.getItem('kiro-balance-cache')
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        return new Map(Object.entries(parsed).map(([id, balance]) => [Number(id), balance as BalanceResponse]))
+      }
+    } catch (error) {
+      console.error('Failed to load balance cache:', error)
+    }
+    return new Map()
+  })
   const [loadingBalanceIds, setLoadingBalanceIds] = useState<Set<number>>(new Set())
   const [queryingInfo, setQueryingInfo] = useState(false)
   const [queryInfoProgress, setQueryInfoProgress] = useState({ current: 0, total: 0 })
@@ -120,7 +131,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
     })
   }, [data?.credentials])
 
-  // 自动查询所有缺少余额数据的启用凭据
+  // 自动查询所有缺少余额数据的启用凭据（使用服务器缓存）
   useEffect(() => {
     if (!data?.credentials.length || queryingInfo) return
 
@@ -136,7 +147,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
         if (cancelled) break
         setLoadingBalanceIds(prev => new Set(prev).add(id))
         try {
-          const balance = await getCredentialBalance(id)
+          const balance = await getCredentialBalance(id, false) // 使用服务器缓存
           if (!cancelled) {
             setBalanceMap(prev => new Map(prev).set(id, balance))
           }
@@ -160,11 +171,6 @@ export function Dashboard({ onLogout }: DashboardProps) {
   const toggleDarkMode = () => {
     setDarkMode(!darkMode)
     document.documentElement.classList.toggle('dark')
-  }
-
-  const handleViewBalance = (id: number) => {
-    setSelectedCredentialId(id)
-    setBalanceDialogOpen(true)
   }
 
   const handleRefresh = () => {
@@ -379,7 +385,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
       })
 
       try {
-        const balance = await getCredentialBalance(id)
+        const balance = await getCredentialBalance(id, false) // 使用服务器缓存
         successCount++
 
         setBalanceMap(prev => {
@@ -450,7 +456,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
       })
 
       try {
-        const balance = await getCredentialBalance(id)
+        const balance = await getCredentialBalance(id, true) // 强制刷新，跳过缓存
         successCount++
 
         // 更新为成功状态
@@ -737,11 +743,13 @@ export function Dashboard({ onLogout }: DashboardProps) {
                   <div key={credential.id} className="min-w-[calc(100vw-2rem)] snap-center md:min-w-0">
                   <CredentialCard
                     credential={credential}
-                    onViewBalance={handleViewBalance}
                     selected={selectedIds.has(credential.id)}
                     onToggleSelect={() => toggleSelect(credential.id)}
                     balance={balanceMap.get(credential.id) || null}
                     loadingBalance={loadingBalanceIds.has(credential.id)}
+                    onBalanceRefreshed={(id, balance) => {
+                      setBalanceMap(prev => new Map(prev).set(id, balance))
+                    }}
                     onPrimarySet={() => {
                       if (loadBalancingData?.mode !== 'priority') {
                         setLoadBalancingMode('priority', {
@@ -818,7 +826,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
 
       {/* 余额对话框 */}
       <BalanceDialog
-        credentialId={selectedCredentialId}
+        credentialId={null}
         open={balanceDialogOpen}
         onOpenChange={setBalanceDialogOpen}
         onBalanceLoaded={(id, balance) => {

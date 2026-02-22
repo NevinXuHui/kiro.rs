@@ -23,15 +23,16 @@ import {
   useResetFailure,
   useDeleteCredential,
 } from '@/hooks/use-credentials'
+import { getCredentialBalance } from '@/api/credentials'
 
 interface CredentialCardProps {
   credential: CredentialStatusItem
-  onViewBalance: (id: number) => void
   selected: boolean
   onToggleSelect: () => void
   balance: BalanceResponse | null
   loadingBalance: boolean
   onPrimarySet?: () => void
+  onBalanceRefreshed?: (id: number, balance: BalanceResponse) => void
 }
 
 function formatLastUsed(lastUsedAt: string | null): string {
@@ -52,22 +53,36 @@ function formatLastUsed(lastUsedAt: string | null): string {
 
 export function CredentialCard({
   credential,
-  onViewBalance,
   selected,
   onToggleSelect,
   balance,
   loadingBalance,
   onPrimarySet,
+  onBalanceRefreshed,
 }: CredentialCardProps) {
   const [editingPriority, setEditingPriority] = useState(false)
   const [priorityValue, setPriorityValue] = useState(String(credential.priority))
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [refreshingBalance, setRefreshingBalance] = useState(false)
 
   const setDisabled = useSetDisabled()
   const setPriority = useSetPriority()
   const setPrimary = useSetPrimary()
   const resetFailure = useResetFailure()
   const deleteCredential = useDeleteCredential()
+
+  const handleRefreshBalance = async () => {
+    setRefreshingBalance(true)
+    try {
+      const freshBalance = await getCredentialBalance(credential.id, true) // 强制刷新
+      onBalanceRefreshed?.(credential.id, freshBalance)
+      toast.success('余额已刷新')
+    } catch (error) {
+      toast.error('刷新失败: ' + (error as Error).message)
+    } finally {
+      setRefreshingBalance(false)
+    }
+  }
 
   const handleToggleDisabled = () => {
     setDisabled.mutate(
@@ -308,10 +323,11 @@ export function CredentialCard({
             <Button
               size="sm"
               variant="default"
-              onClick={() => onViewBalance(credential.id)}
+              onClick={handleRefreshBalance}
+              disabled={refreshingBalance}
               className="font-medium"
             >
-              <RefreshCw className="h-4 w-4 mr-1" />
+              <RefreshCw className={`h-4 w-4 mr-1 ${refreshingBalance ? 'animate-spin' : ''}`} />
               刷新余额
             </Button>
             <Button
