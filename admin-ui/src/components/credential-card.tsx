@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { RefreshCw, ChevronUp, ChevronDown, Wallet, Trash2, Loader2 } from 'lucide-react'
+import { RefreshCw, ChevronUp, ChevronDown, Trash2, Loader2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -159,30 +159,20 @@ export function CredentialCard({
         onDoubleClick={handleCardDoubleClick}
       >
         <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            {/* 左上角：凭据序号 */}
+            <div className="flex items-center gap-2 flex-shrink-0">
               <Checkbox
                 checked={selected}
                 onCheckedChange={onToggleSelect}
                 className="flex-shrink-0"
               />
-              <CardTitle className="text-lg flex items-center gap-2 min-w-0 flex-1">
-                <span className="truncate" title={credential.email || `凭据 #${credential.id}`}>
-                  {credential.email || `凭据 #${credential.id}`}
-                </span>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  {credential.isCurrent && (
-                    <Badge variant="success">当前</Badge>
-                  )}
-                  {credential.disabled && (
-                    <Badge variant="destructive">已禁用</Badge>
-                  )}
-                  {!credential.isCurrent && !credential.disabled && (
-                    <span className="text-xs text-muted-foreground font-normal whitespace-nowrap">双击设为首选</span>
-                  )}
-                </div>
-              </CardTitle>
+              <Badge variant="outline" className="font-mono">
+                #{credential.id}
+              </Badge>
             </div>
+
+            {/* 右上角：启用开关 */}
             <div className="flex items-center gap-2 flex-shrink-0">
               <span className="text-sm text-muted-foreground">启用</span>
               <Switch
@@ -191,6 +181,26 @@ export function CredentialCard({
                 disabled={setDisabled.isPending}
               />
             </div>
+          </div>
+
+          {/* 第二行：邮箱和状态标签 */}
+          <div className="flex items-center gap-2 mt-2">
+            <CardTitle className="text-lg flex items-center gap-2 min-w-0 flex-1">
+              <span className="truncate" title={credential.email || `凭据 #${credential.id}`}>
+                {credential.email || `凭据 #${credential.id}`}
+              </span>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {credential.isCurrent && (
+                  <Badge variant="success">当前</Badge>
+                )}
+                {credential.disabled && (
+                  <Badge variant="destructive">已禁用</Badge>
+                )}
+                {!credential.isCurrent && !credential.disabled && (
+                  <span className="text-xs text-muted-foreground font-normal whitespace-nowrap">双击设为首选</span>
+                )}
+              </div>
+            </CardTitle>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -294,7 +304,16 @@ export function CredentialCard({
           </div>
 
           {/* 操作按钮 */}
-          <div className="flex flex-wrap gap-2 pt-2 border-t">
+          <div className="flex flex-wrap justify-center gap-2 pt-2 border-t">
+            <Button
+              size="sm"
+              variant="default"
+              onClick={() => onViewBalance(credential.id)}
+              className="font-medium"
+            >
+              <RefreshCw className="h-4 w-4 mr-1" />
+              刷新余额
+            </Button>
             <Button
               size="sm"
               variant="outline"
@@ -339,14 +358,6 @@ export function CredentialCard({
             >
               <ChevronDown className="h-4 w-4 mr-1" />
               降低优先级
-            </Button>
-            <Button
-              size="sm"
-              variant="default"
-              onClick={() => onViewBalance(credential.id)}
-            >
-              <Wallet className="h-4 w-4 mr-1" />
-              查看余额
             </Button>
             <Button
               size="sm"
