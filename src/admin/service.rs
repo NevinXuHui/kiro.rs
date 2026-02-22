@@ -81,6 +81,7 @@ impl AdminService {
                 last_used_at: entry.last_used_at.clone(),
                 has_proxy: entry.has_proxy,
                 proxy_url: entry.proxy_url,
+                created_at: entry.created_at,
             })
             .collect();
 
@@ -241,6 +242,7 @@ impl AdminService {
             device_name: None,
             device_type: None,
             last_sync_at: None,
+            created_at: Some(chrono::Utc::now().to_rfc3339()),
         };
 
         // 调用 token_manager 添加凭据

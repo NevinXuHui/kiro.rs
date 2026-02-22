@@ -485,6 +485,9 @@ pub struct CredentialEntrySnapshot {
     /// 代理 URL（用于前端展示）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proxy_url: Option<String>,
+    /// 凭据创建时间（RFC3339 格式）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
 }
 
 /// 凭据管理器状态快照
@@ -1339,6 +1342,7 @@ impl MultiTokenManager {
                     last_used_at: e.last_used_at.clone(),
                     has_proxy: e.credentials.proxy_url.is_some(),
                     proxy_url: e.credentials.proxy_url.clone(),
+                    created_at: e.credentials.created_at.clone(),
                 })
                 .collect(),
             current_id,
@@ -1610,6 +1614,11 @@ impl MultiTokenManager {
         validated_cred.region = new_cred.region;
         validated_cred.auth_region = new_cred.auth_region;
         validated_cred.api_region = new_cred.api_region;
+
+        // 设置创建时间
+        if validated_cred.created_at.is_none() {
+            validated_cred.created_at = Some(chrono::Utc::now().to_rfc3339());
+        }
 
         // 如果没有提供 machine_id，自动生成
         validated_cred.machine_id = new_cred.machine_id.or_else(|| {

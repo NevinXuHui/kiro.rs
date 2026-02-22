@@ -449,6 +449,7 @@ impl DeviceClient {
                     device_name: None,
                     device_type: None,
                     last_sync_at: None,
+                    created_at: Some(chrono::Utc::now().to_rfc3339()),
                 };
 
                 match token_manager.add_credential(kiro_cred).await {

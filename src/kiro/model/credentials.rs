@@ -125,6 +125,10 @@ pub struct KiroCredentials {
     /// 最后同步时间（RFC3339 格式）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_sync_at: Option<String>,
+
+    /// 凭据创建时间（RFC3339 格式）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
 }
 
 /// 判断是否为零（用于跳过序列化）
@@ -364,25 +368,9 @@ mod tests {
     #[test]
     fn test_to_json() {
         let creds = KiroCredentials {
-            id: None,
             access_token: Some("token".to_string()),
-            refresh_token: None,
-            profile_arn: None,
-            expires_at: None,
             auth_method: Some("social".to_string()),
-            client_id: None,
-            client_secret: None,
-            priority: 0,
-            region: None,
-            auth_region: None,
-            api_region: None,
-            machine_id: None,
-            email: None,
-            subscription_title: None,
-            proxy_url: None,
-            proxy_username: None,
-            proxy_password: None,
-            disabled: false,
+            ..Default::default()
         };
 
         let json = creds.to_pretty_json().unwrap();
@@ -499,6 +487,7 @@ mod tests {
         // 测试 region 为 None 时不序列化
         let creds = KiroCredentials {
             refresh_token: Some("test".to_string()),
+            ..Default::default()
         };
 
         let json = creds.to_pretty_json().unwrap();
@@ -599,22 +588,11 @@ mod tests {
             id: Some(42),
             access_token: Some("token".to_string()),
             refresh_token: Some("refresh".to_string()),
-            profile_arn: None,
-            expires_at: None,
             auth_method: Some("social".to_string()),
-            client_id: None,
-            client_secret: None,
             priority: 3,
             region: Some("us-west-2".to_string()),
-            auth_region: None,
-            api_region: None,
             machine_id: Some("c".repeat(64)),
-            email: None,
-            subscription_title: None,
-            proxy_url: None,
-            proxy_username: None,
-            proxy_password: None,
-            disabled: false,
+            ..Default::default()
         };
 
         let json = original.to_pretty_json().unwrap();

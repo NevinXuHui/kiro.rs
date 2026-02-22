@@ -848,6 +848,7 @@ impl SyncManager {
                     device_name: None,
                     device_type: None,
                     last_sync_at: None,
+                    created_at: Some(chrono::Utc::now().to_rfc3339()),
                 };
 
                 // 通过 token_manager 添加凭据（会自动持久化到配置文件）

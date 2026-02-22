@@ -289,6 +289,10 @@ export function CredentialCard({
               <span className="font-medium">{formatLastUsed(credential.lastUsedAt)}</span>
             </div>
             <div className="col-span-2">
+              <span className="text-muted-foreground">导入时间：</span>
+              <span className="font-medium">{formatLastUsed(credential.createdAt || null)}</span>
+            </div>
+            <div className="col-span-2">
               <span className="text-muted-foreground">剩余用量：</span>
               {loadingBalance ? (
                 <span className="text-sm ml-1">

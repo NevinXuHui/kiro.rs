@@ -23,6 +23,7 @@ export interface CredentialStatusItem {
   lastUsedAt: string | null
   hasProxy: boolean
   proxyUrl?: string
+  createdAt?: string | null
 }
 
 // 余额响应
