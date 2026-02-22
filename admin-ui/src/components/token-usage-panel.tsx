@@ -208,10 +208,30 @@ export function TokenUsagePanel() {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(getStoredPageSize)
   const [timeDimension, setTimeDimension] = useState<'hour' | 'day' | 'week'>('day')
-  const [activeSubTab, setActiveSubTab] = useState<'chart' | 'ranking' | 'requests'>('chart')
+  const [activeSubTab, setActiveSubTab] = useState<'chart' | 'ranking' | 'requests'>('requests')
 
   // 创建 API Key ID 到标签的映射
   const apiKeyMap = new Map(apiKeys?.map(key => [key.id, key.label]) || [])
+
+  // 为每个 API Key 分配颜色
+  const keyColors = [
+    'bg-blue-600',
+    'bg-green-600',
+    'bg-purple-600',
+    'bg-orange-600',
+    'bg-pink-600',
+    'bg-cyan-600',
+    'bg-yellow-600',
+    'bg-red-600',
+    'bg-indigo-600',
+    'bg-teal-600',
+  ]
+
+  const getKeyColor = (keyId: number | undefined) => {
+    if (!keyId) return 'bg-gray-600'
+    const index = keyId % keyColors.length
+    return keyColors[index]
+  }
 
   const handleReset = () => {
     if (!confirm('确定要重置所有 Token 使用统计吗？此操作不可撤销。')) return
@@ -247,6 +267,9 @@ export function TokenUsagePanel() {
     (b[1].inputTokens + b[1].outputTokens) - (a[1].inputTokens + a[1].outputTokens)
   )
   const credentialEntries = Object.entries(data.byCredential).sort((a, b) =>
+    (b[1].inputTokens + b[1].outputTokens) - (a[1].inputTokens + a[1].outputTokens)
+  )
+  const apiKeyEntries = Object.entries(data.byApiKey).sort((a, b) =>
     (b[1].inputTokens + b[1].outputTokens) - (a[1].inputTokens + a[1].outputTokens)
   )
 
@@ -347,6 +370,10 @@ export function TokenUsagePanel() {
       {/* 子标签页导航 */}
       <Tabs value={activeSubTab} onValueChange={(v) => setActiveSubTab(v as typeof activeSubTab)} className="space-y-4">
         <TabsList className="w-full justify-start">
+          <TabsTrigger value="requests" className="flex items-center gap-1">
+            <List className="h-3 w-3" />
+            <span className="hidden sm:inline">最近</span>请求
+          </TabsTrigger>
           <TabsTrigger value="chart" className="flex items-center gap-1">
             <TrendingUp className="h-3 w-3" />
             <span className="hidden sm:inline">趋势</span>图表
@@ -355,11 +382,111 @@ export function TokenUsagePanel() {
             <BarChart3 className="h-3 w-3" />
             <span className="hidden sm:inline">使用</span>排行
           </TabsTrigger>
-          <TabsTrigger value="requests" className="flex items-center gap-1">
-            <List className="h-3 w-3" />
-            <span className="hidden sm:inline">最近</span>请求
-          </TabsTrigger>
         </TabsList>
+
+        {/* 最近请求 */}
+        <TabsContent value="requests">
+          <Card>
+            <CardHeader className="pb-2 sm:pb-3 px-3 sm:px-6">
+              <CardTitle className="text-xs sm:text-sm font-medium">
+                最近请求
+                {allRequests.length > 0 && (
+                  <span className="text-muted-foreground font-normal ml-1 sm:ml-2">
+                    （共 {allRequests.length} 条）
+                  </span>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-3 sm:px-6">
+              {recentRequests.length === 0 ? (
+                <p className="text-sm text-muted-foreground">暂无请求记录</p>
+              ) : (
+                <>
+                  <div className="overflow-x-auto max-w-full" style={{ WebkitOverflowScrolling: 'touch' }}>
+                    <table className="text-[11px] sm:text-sm sm:w-full">
+                      <thead>
+                        <tr className="border-b text-muted-foreground">
+                          <th className="text-left py-1 sm:py-1.5 pr-3 font-medium whitespace-nowrap">时间</th>
+                          <th className="text-left py-1 sm:py-1.5 pr-3 font-medium whitespace-nowrap">模型</th>
+                          <th className="text-right py-1 sm:py-1.5 pr-3 font-medium whitespace-nowrap">输入</th>
+                          <th className="text-right py-1 sm:py-1.5 pr-3 font-medium whitespace-nowrap">输出</th>
+                          <th className="text-center py-1 sm:py-1.5 pr-3 font-medium whitespace-nowrap">Key</th>
+                          <th className="text-right py-1 sm:py-1.5 font-medium whitespace-nowrap">凭据</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {recentRequests.map((req, idx) => {
+                          const time = new Date(req.timestamp)
+                          const timeStr = time.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+                          const apiKeyLabel = req.apiKeyId ? apiKeyMap.get(req.apiKeyId) : null
+                          const keyColor = getKeyColor(req.apiKeyId)
+                          return (
+                            <tr key={idx} className="border-b last:border-0">
+                              <td className="py-1 sm:py-1.5 pr-3 text-muted-foreground whitespace-nowrap">{timeStr}</td>
+                              <td className="py-1 sm:py-1.5 pr-3 whitespace-nowrap" title={req.model}>{req.model}</td>
+                              <td className="py-1 sm:py-1.5 pr-3 text-right text-blue-600 whitespace-nowrap">{formatNumber(req.inputTokens)}</td>
+                              <td className="py-1 sm:py-1.5 pr-3 text-right text-green-600 whitespace-nowrap">{formatNumber(req.outputTokens)}</td>
+                              <td className="py-1 sm:py-1.5 pr-3 text-center whitespace-nowrap">
+                                {apiKeyLabel ? (
+                                  <Badge className={`${keyColor} text-white border-0 text-[10px] sm:text-xs px-1 py-0`}>{apiKeyLabel}</Badge>
+                                ) : (
+                                  <span className="text-muted-foreground">-</span>
+                                )}
+                              </td>
+                              <td className="py-1 sm:py-1.5 text-right whitespace-nowrap">#{req.credentialId}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  {/* 分页控件 */}
+                  {allRequests.length > 0 && (
+                    <div className="flex items-center justify-between pt-3 border-t mt-3">
+                      <span className="text-xs text-muted-foreground">
+                        第 {(safePage - 1) * pageSize + 1}-{Math.min(safePage * pageSize, allRequests.length)} 条，共 {allRequests.length} 条
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <select
+                          className="h-7 text-xs border rounded px-1 bg-background"
+                          value={pageSize}
+                          onChange={(e) => { const v = Number(e.target.value); setPageSize(v); setCurrentPage(1); localStorage.setItem(PAGE_SIZE_KEY, String(v)) }}
+                        >
+                          {PAGE_SIZE_OPTIONS.map(n => (
+                            <option key={n} value={n}>{n} 条/页</option>
+                          ))}
+                        </select>
+                        {totalPages > 1 && (
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              disabled={safePage <= 1}
+                              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                            >
+                              <ChevronLeft className="h-3.5 w-3.5" />
+                            </Button>
+                            <span className="text-xs px-2">{safePage} / {totalPages}</span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              disabled={safePage >= totalPages}
+                              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                            >
+                              <ChevronRight className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* 趋势图表 */}
         <TabsContent value="chart" className="space-y-4">
@@ -384,7 +511,7 @@ export function TokenUsagePanel() {
 
         {/* 使用排行 */}
         <TabsContent value="ranking" className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
             {/* 按模型统计 */}
             <Card>
               <CardHeader className="pb-2 sm:pb-3 px-3 sm:px-6">
@@ -444,110 +571,40 @@ export function TokenUsagePanel() {
                 )}
               </CardContent>
             </Card>
-          </div>
-        </TabsContent>
 
-        {/* 最近请求 */}
-        <TabsContent value="requests">
-          <Card>
-            <CardHeader className="pb-2 sm:pb-3 px-3 sm:px-6">
-              <CardTitle className="text-xs sm:text-sm font-medium">
-                最近请求
-                {allRequests.length > 0 && (
-                  <span className="text-muted-foreground font-normal ml-1 sm:ml-2">
-                    （共 {allRequests.length} 条）
-                  </span>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-3 sm:px-6">
-              {recentRequests.length === 0 ? (
-                <p className="text-sm text-muted-foreground">暂无请求记录</p>
-              ) : (
-                <>
-                  <div className="overflow-x-auto max-w-full" style={{ WebkitOverflowScrolling: 'touch' }}>
-                    <table className="text-[11px] sm:text-sm sm:w-full">
-                      <thead>
-                        <tr className="border-b text-muted-foreground">
-                          <th className="text-left py-1 sm:py-1.5 pr-3 font-medium whitespace-nowrap">时间</th>
-                          <th className="text-left py-1 sm:py-1.5 pr-3 font-medium whitespace-nowrap">模型</th>
-                          <th className="text-right py-1 sm:py-1.5 pr-3 font-medium whitespace-nowrap">输入</th>
-                          <th className="text-right py-1 sm:py-1.5 pr-3 font-medium whitespace-nowrap">输出</th>
-                          <th className="text-center py-1 sm:py-1.5 pr-3 font-medium whitespace-nowrap">Key</th>
-                          <th className="text-right py-1 sm:py-1.5 font-medium whitespace-nowrap">凭据</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {recentRequests.map((req, idx) => {
-                          const time = new Date(req.timestamp)
-                          const timeStr = time.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
-                          const apiKeyLabel = req.apiKeyId ? apiKeyMap.get(req.apiKeyId) : null
-                          return (
-                            <tr key={idx} className="border-b last:border-0">
-                              <td className="py-1 sm:py-1.5 pr-3 text-muted-foreground whitespace-nowrap">{timeStr}</td>
-                              <td className="py-1 sm:py-1.5 pr-3 whitespace-nowrap" title={req.model}>{req.model}</td>
-                              <td className="py-1 sm:py-1.5 pr-3 text-right text-blue-600 whitespace-nowrap">{formatNumber(req.inputTokens)}</td>
-                              <td className="py-1 sm:py-1.5 pr-3 text-right text-green-600 whitespace-nowrap">{formatNumber(req.outputTokens)}</td>
-                              <td className="py-1 sm:py-1.5 pr-3 text-center whitespace-nowrap">
-                                {apiKeyLabel ? (
-                                  <Badge variant="secondary" className="text-[10px] sm:text-xs px-1 py-0">{apiKeyLabel}</Badge>
-                                ) : (
-                                  <span className="text-muted-foreground">-</span>
-                                )}
-                              </td>
-                              <td className="py-1 sm:py-1.5 text-right whitespace-nowrap">#{req.credentialId}</td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                  {/* 分页控件 */}
-                  {allRequests.length > 0 && (
-                    <div className="flex items-center justify-between pt-3 border-t mt-3">
-                      <span className="text-xs text-muted-foreground">
-                        第 {(safePage - 1) * pageSize + 1}-{Math.min(safePage * pageSize, allRequests.length)} 条，共 {allRequests.length} 条
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <select
-                          className="h-7 text-xs border rounded px-1 bg-background"
-                          value={pageSize}
-                          onChange={(e) => { const v = Number(e.target.value); setPageSize(v); setCurrentPage(1); localStorage.setItem(PAGE_SIZE_KEY, String(v)) }}
-                        >
-                          {PAGE_SIZE_OPTIONS.map(n => (
-                            <option key={n} value={n}>{n} 条/页</option>
-                          ))}
-                        </select>
-                        {totalPages > 1 && (
-                          <div className="flex items-center gap-1">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 w-7 p-0"
-                              disabled={safePage <= 1}
-                              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                            >
-                              <ChevronLeft className="h-3.5 w-3.5" />
-                            </Button>
-                            <span className="text-xs px-2">{safePage} / {totalPages}</span>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 w-7 p-0"
-                              disabled={safePage >= totalPages}
-                              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                            >
-                              <ChevronRight className="h-3.5 w-3.5" />
-                            </Button>
+            {/* 按 API Key 统计 */}
+            <Card>
+              <CardHeader className="pb-2 sm:pb-3 px-3 sm:px-6">
+                <CardTitle className="text-xs sm:text-sm font-medium">按 API Key 统计</CardTitle>
+              </CardHeader>
+              <CardContent className="px-3 sm:px-6">
+                {apiKeyEntries.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">暂无数据</p>
+                ) : (
+                  <div className="space-y-2 sm:space-y-3">
+                    {apiKeyEntries.map(([keyId, stats]) => {
+                      const keyLabel = apiKeyMap.get(Number(keyId)) || `Key #${keyId}`
+                      return (
+                        <div key={keyId} className="flex items-center justify-between text-xs sm:text-sm">
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium truncate" title={keyLabel}>{keyLabel}</div>
+                            <div className="text-[10px] sm:text-xs text-muted-foreground">
+                              <span className="text-blue-600">{formatNumber(stats.inputTokens)} in</span>
+                              {' / '}
+                              <span className="text-green-600">{formatNumber(stats.outputTokens)} out</span>
+                            </div>
                           </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </CardContent>
-          </Card>
+                          <Badge variant="outline" className="ml-2 shrink-0 text-[10px] sm:text-xs">
+                            {stats.requests} 次
+                          </Badge>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </div>
