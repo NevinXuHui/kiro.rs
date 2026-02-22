@@ -255,11 +255,20 @@ impl AdminService {
             tracing::warn!("添加凭据后获取订阅等级失败（不影响凭据添加）: {}", e);
         }
 
+        // 获取更新后的凭据信息（可能包含从 AWS 获取的 email）
+        let updated_email = self.token_manager
+            .snapshot()
+            .entries
+            .iter()
+            .find(|e| e.id == credential_id)
+            .and_then(|e| e.email.clone())
+            .or(email);
+
         Ok(AddCredentialResponse {
             success: true,
             message: format!("凭据添加成功，ID: {}", credential_id),
             credential_id,
-            email,
+            email: updated_email,
         })
     }
 
