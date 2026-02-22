@@ -19,7 +19,7 @@
 # IDE 配置
 /.vscode/
 /.history/
-/.lh/
+**/.lh/
 
 # 工作流配置
 /.spec-workflow/
@@ -48,3 +48,4 @@
 .DS_Store
 
 .claude/
+**/credentials.json
