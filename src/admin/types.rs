@@ -211,6 +211,9 @@ pub struct ConnectivityTestRequest {
     /// 可选的模型名称（不指定则使用默认模型）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    /// 可选的测试提示词（不指定则使用默认提示）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
 }
 
 /// 连通性测试响应

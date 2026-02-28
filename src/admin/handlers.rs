@@ -719,7 +719,7 @@ pub async fn test_connectivity(
     let client_ip = extract_client_ip(&headers, Some(&ConnectInfo(addr)));
 
     match payload.mode.as_str() {
-        "anthropic" => test_anthropic_connectivity(&state, payload.model, client_ip).await.into_response(),
+        "anthropic" => test_anthropic_connectivity(&state, payload.model, payload.prompt, client_ip).await.into_response(),
         "openai" => {
             Json(ConnectivityTestResponse {
                 success: false,
@@ -745,7 +745,7 @@ pub async fn test_connectivity(
 }
 
 /// Anthropic 模式连通性测试
-async fn test_anthropic_connectivity(state: &AdminState, model: Option<String>, client_ip: Option<String>) -> Json<ConnectivityTestResponse> {
+async fn test_anthropic_connectivity(state: &AdminState, model: Option<String>, prompt: Option<String>, client_ip: Option<String>) -> Json<ConnectivityTestResponse> {
     let Some(provider) = &state.kiro_provider else {
         return Json(ConnectivityTestResponse {
             success: false,
@@ -761,14 +761,15 @@ async fn test_anthropic_connectivity(state: &AdminState, model: Option<String>, 
     };
 
     let test_model = model.as_deref().unwrap_or("claude-sonnet-4-20250514");
+    let test_prompt = prompt.as_deref().unwrap_or("Say hello in one short sentence.");
 
     // 构建最小 MessagesRequest
     let messages_request = crate::anthropic::types::MessagesRequest {
         model: test_model.to_string(),
-        max_tokens: 32,
+        max_tokens: 1024,
         messages: vec![crate::anthropic::types::Message {
             role: "user".to_string(),
-            content: serde_json::json!("Say hello in one short sentence."),
+            content: serde_json::json!(test_prompt),
         }],
         stream: false,
         system: None,
