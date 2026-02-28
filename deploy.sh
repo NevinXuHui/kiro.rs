@@ -54,6 +54,8 @@ if [[ -d "$NVM_DIR/versions/node" ]]; then
     NODE_DIR=$(find "$NVM_DIR/versions/node" -maxdepth 1 -type d | sort -V | tail -1)
     [[ -d "$NODE_DIR/bin" ]] && export PATH="$NODE_DIR/bin:$PATH"
 fi
+# npm-global (pnpm 等全局工具)
+[[ -d "$USER_HOME/.npm-global/bin" ]] && export PATH="$USER_HOME/.npm-global/bin:$PATH"
 # cargo / rustup
 [[ -d "$USER_HOME/.cargo/bin" ]] && export PATH="$USER_HOME/.cargo/bin:$PATH"
 
