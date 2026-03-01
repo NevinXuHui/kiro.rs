@@ -274,9 +274,14 @@ pub async fn post_messages(
             }
         })
         .map(|s| {
-            // 截断到 500 字符
+            // 截断到 500 字符（按字符边界安全截断）
             if s.len() > 500 {
-                format!("{}...", &s[..500])
+                // 找到最后一个字符边界
+                let mut end = 500;
+                while end > 0 && !s.is_char_boundary(end) {
+                    end -= 1;
+                }
+                format!("{}...", &s[..end])
             } else {
                 s
             }
@@ -900,9 +905,14 @@ pub async fn post_messages_cc(
             }
         })
         .map(|s| {
-            // 截断到 500 字符
+            // 截断到 500 字符（按字符边界安全截断）
             if s.len() > 500 {
-                format!("{}...", &s[..500])
+                // 找到最后一个字符边界
+                let mut end = 500;
+                while end > 0 && !s.is_char_boundary(end) {
+                    end -= 1;
+                }
+                format!("{}...", &s[..end])
             } else {
                 s
             }
