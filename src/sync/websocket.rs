@@ -25,6 +25,7 @@ pub struct DeviceInfo {
 }
 
 /// 设备注册响应
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeviceRegisteredResponse {
     pub success: bool,
@@ -33,6 +34,7 @@ pub struct DeviceRegisteredResponse {
 }
 
 /// 在线设备信息
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OnlineDevice {
@@ -47,6 +49,7 @@ pub struct OnlineDevice {
 }
 
 /// 设备列表更新
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DevicesUpdate {
     pub devices: Vec<OnlineDevice>,
@@ -54,6 +57,7 @@ pub struct DevicesUpdate {
 }
 
 /// Socket.IO 客户端状态
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConnectionState {
     Disconnected,
@@ -64,6 +68,7 @@ pub enum ConnectionState {
 }
 
 /// Socket.IO 设备客户端
+#[allow(dead_code)]
 #[derive(Clone)]
 pub struct DeviceClient {
     server_url: String,
@@ -76,6 +81,7 @@ pub struct DeviceClient {
 
 impl DeviceClient {
     /// 创建新的设备客户端
+    #[allow(dead_code)]
     pub fn new(server_url: String, heartbeat_interval: Duration) -> Self {
         Self {
             server_url,
@@ -88,6 +94,7 @@ impl DeviceClient {
     }
 
     /// 连接并注册设备
+    #[allow(dead_code)]
     pub async fn connect_and_register(
         &self,
         device_info: DeviceInfo,
@@ -327,6 +334,7 @@ impl DeviceClient {
     }
 
     /// 同步获取当前连接状态
+    #[allow(dead_code)]
     pub fn get_state_sync(&self) -> ConnectionState {
         // 使用 try_read 避免阻塞
         if let Ok(guard) = self.state.try_read() {
@@ -358,6 +366,7 @@ impl DeviceClient {
     }
 
     /// 处理凭证命令
+    #[allow(dead_code)]
     async fn handle_credential_command(
         payload: Payload,
         token_manager: Arc<crate::kiro::token_manager::MultiTokenManager>,
@@ -407,6 +416,7 @@ impl DeviceClient {
     }
 
     /// 执行具体命令
+    #[allow(dead_code)]
     async fn execute_command(
         command: crate::sync::types::DeviceCommand,
         token_manager: Arc<crate::kiro::token_manager::MultiTokenManager>,

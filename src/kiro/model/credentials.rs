@@ -137,6 +137,7 @@ fn is_zero(value: &u32) -> bool {
 }
 
 /// 判断是否为 false（用于跳过序列化）
+#[allow(dead_code)]
 fn is_false(value: &bool) -> bool {
     !value
 }

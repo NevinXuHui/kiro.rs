@@ -188,6 +188,7 @@ pub enum DeviceCommand {
 }
 
 /// 命令执行响应
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommandResponse {

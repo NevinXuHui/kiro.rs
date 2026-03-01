@@ -28,7 +28,7 @@ async fn index_handler() -> impl IntoResponse {
 
 /// 处理静态文件请求
 async fn static_handler(uri: Uri) -> impl IntoResponse {
-    let mut path = uri.path().trim_start_matches('/');
+    let path = uri.path().trim_start_matches('/');
     
     // 如果路径为空,返回 index.html
     if path.is_empty() {

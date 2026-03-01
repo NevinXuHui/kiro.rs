@@ -331,6 +331,7 @@ impl SocketIOClient {
     }
 
     /// 连接并注册设备（兼容旧接口）
+    #[allow(dead_code)]
     pub async fn connect_and_register(&self, device_info: DeviceInfo) -> Result<()> {
         Self::connect_once(&self.server_url, &device_info, self.state.clone(), None, false, None).await
     }
