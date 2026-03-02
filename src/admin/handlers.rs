@@ -12,9 +12,10 @@ use super::{
     middleware::AdminState,
     types::{
         AddCredentialRequest, ConnectivityTestRequest, ConnectivityTestResponse,
-        CreateApiKeyRequest, CreateApiKeyResponse, ProxyConfigResponse,
+        CreateApiKeyRequest, CreateApiKeyResponse, CredentialTestResult, ProxyConfigResponse,
         SetDisabledRequest, SetLoadBalancingModeRequest, SetPriorityRequest, SuccessResponse,
-        UpdateApiKeyRequest, UpdateProxyConfigRequest,
+        TestCredentialsRequest, TestCredentialsResponse, UpdateApiKeyRequest,
+        UpdateProxyConfigRequest,
     },
 };
 
@@ -931,6 +932,52 @@ async fn test_anthropic_connectivity(state: &AdminState, model: Option<String>, 
         input_tokens,
         output_tokens: Some(output_tokens),
         error: None,
+    })
+}
+
+/// POST /api/admin/credentials/test
+/// 测试未验证的凭证
+pub async fn test_credentials(
+    State(state): State<AdminState>,
+    Json(payload): Json<TestCredentialsRequest>,
+) -> impl IntoResponse {
+    let test_count = payload.test_count;
+    let model = payload.model.as_deref().unwrap_or("claude-sonnet-4-20250514");
+
+    let results = if let Some(credential_ids) = payload.credential_ids {
+        // 测试指定的凭证ID
+        tracing::info!("开始测试指定凭证 {:?}，每个测试 {} 次，使用模型 {}", credential_ids, test_count, model);
+        state.service.token_manager().test_specific_credentials(&credential_ids, test_count, model).await
+    } else {
+        // 测试所有未验证凭证
+        tracing::info!("开始手动测试未验证凭证，每个测试 {} 次，使用模型 {}", test_count, model);
+        state.service.token_manager().test_unverified_credentials(test_count, model).await
+    };
+
+    if results.is_empty() {
+        return Json(TestCredentialsResponse {
+            success: true,
+            message: "没有需要测试的凭证".to_string(),
+            results: Vec::new(),
+        });
+    }
+
+    let test_results: Vec<CredentialTestResult> = results
+        .into_iter()
+        .map(|(credential_id, success_count, failed_count)| CredentialTestResult {
+            credential_id,
+            success_count,
+            failed_count,
+            total_count: test_count,
+        })
+        .collect();
+
+    tracing::info!("凭证测试完成，共测试 {} 个凭证", test_results.len());
+
+    Json(TestCredentialsResponse {
+        success: true,
+        message: format!("已测试 {} 个凭证", test_results.len()),
+        results: test_results,
     })
 }
 

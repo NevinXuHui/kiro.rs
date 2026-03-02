@@ -244,6 +244,42 @@ pub struct ConnectivityTestResponse {
     pub error: Option<String>,
 }
 
+/// 凭证测试请求
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TestCredentialsRequest {
+    /// 测试次数（默认 20）
+    #[serde(default = "default_test_count")]
+    pub test_count: usize,
+    /// 指定要测试的凭证ID列表（可选，不指定则测试所有未验证凭证）
+    pub credential_ids: Option<Vec<u64>>,
+    /// 测试使用的模型（可选，默认 claude-sonnet-4-20250514）
+    pub model: Option<String>,
+}
+
+fn default_test_count() -> usize {
+    20
+}
+
+/// 凭证测试响应
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TestCredentialsResponse {
+    pub success: bool,
+    pub message: String,
+    pub results: Vec<CredentialTestResult>,
+}
+
+/// 单个凭证测试结果
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CredentialTestResult {
+    pub credential_id: u64,
+    pub success_count: usize,
+    pub failed_count: usize,
+    pub total_count: usize,
+}
+
 // ============ 代理配置 ============
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

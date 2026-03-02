@@ -1776,6 +1776,216 @@ impl MultiTokenManager {
         tracing::info!("负载均衡模式已设置为: {}", mode);
         Ok(())
     }
+
+    /// 测试未验证的凭证（success_count = 0）
+    /// 每个凭证测试指定次数，返回测试结果 (credential_id, success_count, failed_count)
+    pub async fn test_unverified_credentials(&self, test_count: usize, model: &str) -> Vec<(u64, usize, usize)> {
+        let unverified_ids: Vec<u64> = {
+            let entries = self.entries.lock();
+            entries
+                .iter()
+                .filter(|e| !e.disabled && e.success_count == 0)
+                .map(|e| e.id)
+                .collect()
+        };
+
+        if unverified_ids.is_empty() {
+            tracing::info!("没有需要测试的未验证凭证");
+            return Vec::new();
+        }
+
+        tracing::info!("发现 {} 个未验证凭证，开始测试（每个测试 {} 次）", unverified_ids.len(), test_count);
+
+        self.test_credentials_by_ids(&unverified_ids, test_count, model).await
+    }
+
+    /// 测试指定的凭证ID列表
+    pub async fn test_specific_credentials(&self, credential_ids: &[u64], test_count: usize, model: &str) -> Vec<(u64, usize, usize)> {
+        // 过滤出存在且未禁用的凭证
+        let valid_ids: Vec<u64> = {
+            let entries = self.entries.lock();
+            credential_ids
+                .iter()
+                .filter(|&&id| {
+                    entries.iter().any(|e| e.id == id && !e.disabled)
+                })
+                .copied()
+                .collect()
+        };
+
+        if valid_ids.is_empty() {
+            tracing::info!("没有有效的凭证可以测试");
+            return Vec::new();
+        }
+
+        tracing::info!("开始测试 {} 个指定凭证（每个测试 {} 次）", valid_ids.len(), test_count);
+
+        self.test_credentials_by_ids(&valid_ids, test_count, model).await
+    }
+
+    /// 通用的凭证测试方法
+    async fn test_credentials_by_ids(&self, credential_ids: &[u64], test_count: usize, model: &str) -> Vec<(u64, usize, usize)> {
+        let mut results = Vec::new();
+
+        for &id in credential_ids {
+            let email = {
+                let entries = self.entries.lock();
+                entries
+                    .iter()
+                    .find(|e| e.id == id)
+                    .and_then(|e| e.credentials.email.clone())
+            };
+
+            tracing::info!("测试凭证 #{} ({})", id, email.as_deref().unwrap_or("无邮箱"));
+
+            let mut success = 0;
+            let mut failed = 0;
+
+            for i in 1..=test_count {
+                // 构建 Anthropic Messages API 格式的测试请求
+                let messages_request = crate::anthropic::types::MessagesRequest {
+                    model: model.to_string(),
+                    max_tokens: 32,
+                    messages: vec![crate::anthropic::types::Message {
+                        role: "user".to_string(),
+                        content: serde_json::json!("Hi"),
+                    }],
+                    stream: false,
+                    system: None,
+                    tools: None,
+                    tool_choice: None,
+                    thinking: None,
+                    output_config: None,
+                    metadata: None,
+                };
+
+                // 转换为 Kiro 格式
+                let conversion_result = match crate::anthropic::converter::convert_request(&messages_request) {
+                    Ok(result) => result,
+                    Err(e) => {
+                        tracing::warn!("凭证 #{} 请求转换失败: {}", id, e);
+                        failed += 1;
+                        continue;
+                    }
+                };
+
+                let test_request = crate::kiro::model::requests::kiro::KiroRequest {
+                    conversation_state: conversion_result.conversation_state,
+                    profile_arn: None,
+                };
+
+                let request_body = match serde_json::to_string(&test_request) {
+                    Ok(body) => body,
+                    Err(e) => {
+                        tracing::warn!("凭证 #{} 序列化请求失败: {}", id, e);
+                        failed += 1;
+                        continue;
+                    }
+                };
+
+                // 尝试使用该凭证获取 context 并调用 API
+                match self.test_single_credential(id, &request_body).await {
+                    Ok(_) => {
+                        success += 1;
+                        if i % 5 == 0 || i == test_count {
+                            tracing::info!("凭证 #{} 测试进度: {}/{}", id, i, test_count);
+                        }
+                    }
+                    Err(e) => {
+                        failed += 1;
+                        tracing::debug!("凭证 #{} 测试 {}/{} 失败: {}", id, i, test_count, e);
+                    }
+                }
+
+                // 添加小延迟避免请求过快
+                tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+            }
+
+            tracing::info!(
+                "凭证 #{} 测试完成: 成功 {}/{}, 失败 {}",
+                id, success, test_count, failed
+            );
+
+            results.push((id, success, failed));
+        }
+
+        // 保存统计数据
+        self.save_stats();
+
+        results
+    }
+
+    /// 测试单个凭证（内部方法）
+    async fn test_single_credential(&self, credential_id: u64, request_body: &str) -> anyhow::Result<()> {
+        // 获取凭证信息
+        let (credentials, proxy) = {
+            let entries = self.entries.lock();
+            let entry = entries
+                .iter()
+                .find(|e| e.id == credential_id)
+                .ok_or_else(|| anyhow::anyhow!("凭据 #{} 不存在", credential_id))?;
+
+            if entry.disabled {
+                anyhow::bail!("凭据 #{} 已被禁用", credential_id);
+            }
+
+            let proxy = entry.credentials.proxy_url.as_ref().map(|url| {
+                let mut p = crate::http_client::ProxyConfig::new(url);
+                if let (Some(u), Some(pw)) = (&entry.credentials.proxy_username, &entry.credentials.proxy_password) {
+                    p = p.with_auth(u, pw);
+                }
+                p
+            }).or_else(|| self.shared_proxy.get());
+
+            (entry.credentials.clone(), proxy)
+        };
+
+        // 刷新 token
+        let token_result = crate::kiro::token_manager::refresh_token(&credentials, &self.config, proxy.as_ref()).await?;
+
+        // 更新凭据
+        {
+            let mut entries = self.entries.lock();
+            if let Some(entry) = entries.iter_mut().find(|e| e.id == credential_id) {
+                entry.credentials.access_token = token_result.access_token.clone();
+                entry.credentials.refresh_token = token_result.refresh_token.clone();
+                entry.credentials.expires_at = token_result.expires_at.clone();
+            }
+        }
+
+        // 构建请求
+        let client = crate::http_client::build_client(
+            proxy.as_ref(),
+            30,
+            crate::model::config::TlsBackend::Rustls
+        )?;
+        let url = format!(
+            "https://q.{}.amazonaws.com/generateAssistantResponse",
+            credentials.auth_region.as_deref().unwrap_or("us-east-1")
+        );
+
+        let response = client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", token_result.access_token.as_deref().unwrap_or("")))
+            .header("Content-Type", "application/json")
+            .body(request_body.to_string())
+            .timeout(std::time::Duration::from_secs(30))
+            .send()
+            .await?;
+
+        if response.status().is_success() {
+            // 更新成功计数
+            let mut entries = self.entries.lock();
+            if let Some(entry) = entries.iter_mut().find(|e| e.id == credential_id) {
+                entry.success_count += 1;
+                entry.last_used_at = Some(chrono::Utc::now().to_rfc3339());
+            }
+            self.stats_dirty.store(true, std::sync::atomic::Ordering::Relaxed);
+            Ok(())
+        } else {
+            anyhow::bail!("HTTP {}", response.status())
+        }
+    }
 }
 
 impl Drop for MultiTokenManager {

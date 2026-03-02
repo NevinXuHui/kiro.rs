@@ -15,7 +15,7 @@ use super::{
         reset_failure_count, reset_token_usage, save_sync_config,
         set_credential_disabled, set_credential_primary, set_credential_priority,
         set_load_balancing_mode, set_proxy_config, sync_now,
-        test_connectivity, test_sync_connection, update_api_key,
+        test_connectivity, test_credentials, test_sync_connection, update_api_key,
     },
     middleware::{AdminState, admin_auth_middleware},
 };
@@ -58,6 +58,7 @@ pub fn create_admin_router(state: AdminState) -> Router {
         .route("/credentials/{id}/set-primary", post(set_credential_primary))
         .route("/credentials/{id}/reset", post(reset_failure_count))
         .route("/credentials/{id}/balance", get(get_credential_balance))
+        .route("/credentials/test", post(test_credentials))
         .route(
             "/config/load-balancing",
             get(get_load_balancing_mode).put(set_load_balancing_mode),

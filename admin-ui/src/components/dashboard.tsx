@@ -41,9 +41,10 @@ import {
   useLoadBalancingMode,
   useSetLoadBalancingMode,
 } from "@/hooks/use-credentials";
-import { getCredentialBalance } from "@/api/credentials";
+import { getCredentialBalance, testCredentials } from "@/api/credentials";
 import { extractErrorMessage } from "@/lib/utils";
 import type { BalanceResponse } from "@/types/api";
+import { getTestModel, getAutoTestOnStartup } from "@/lib/test-config";
 
 interface DashboardProps {
   onLogout: () => void;
@@ -92,6 +93,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
     current: 0,
     total: 0,
   });
+  const [testingCredentials, setTestingCredentials] = useState(false);
   const [activeTab, setActiveTab] = useState(
     () => localStorage.getItem("admin-active-tab") || "credentials",
   );
@@ -184,6 +186,66 @@ export function Dashboard({ onLogout }: DashboardProps) {
       return next.size === prev.size ? prev : next;
     });
   }, [data?.credentials]);
+
+  // 启动时自动测试凭证（如果设置已启用）
+  const hasAutoTestedRef = useRef(false);
+  useEffect(() => {
+    const shouldAutoTest = getAutoTestOnStartup();
+    if (!shouldAutoTest || !data?.credentials.length || testingCredentials) {
+      return;
+    }
+
+    // 只在首次加载时执行一次
+    if (hasAutoTestedRef.current) {
+      return;
+    }
+
+    // 标记已执行，避免重复测试
+    hasAutoTestedRef.current = true;
+
+    // 延迟3秒后开始测试，避免影响初始加载
+    const timer = setTimeout(async () => {
+      try {
+        setTestingCredentials(true);
+        // 只测试未验证的凭证（success_count = 0），与后端逻辑保持一致
+        const unverifiedIds = data.credentials
+          .filter((c) => !c.disabled && c.successCount === 0)
+          .map((c) => c.id);
+
+        if (unverifiedIds.length === 0) {
+          return;
+        }
+
+        toast.info(`开始自动测试 ${unverifiedIds.length} 个未验证凭证...`);
+
+        const response = await testCredentials({
+          testCount: 20,
+          credentialIds: unverifiedIds,
+          model: getTestModel(),
+        });
+
+        if (response.success) {
+          const totalSuccess = response.results.reduce(
+            (sum, r) => sum + r.successCount,
+            0,
+          );
+          const totalTests = response.results.reduce(
+            (sum, r) => sum + r.totalCount,
+            0,
+          );
+          toast.success(`自动测试完成：成功 ${totalSuccess}/${totalTests}`);
+          refetch();
+        }
+      } catch (error) {
+        console.error("Auto test failed:", error);
+        toast.error(`自动测试失败: ${extractErrorMessage(error)}`);
+      } finally {
+        setTestingCredentials(false);
+      }
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [data?.credentials, testingCredentials, refetch]);
 
   // 自动查询所有缺少余额数据的启用凭据（使用服务器缓存）
   useEffect(() => {
@@ -599,6 +661,64 @@ export function Dashboard({ onLogout }: DashboardProps) {
     });
   };
 
+  // 测试未验证凭据
+  const handleTestCredentials = async () => {
+    if (!data?.credentials) {
+      toast.error("没有可测试的凭据");
+      return;
+    }
+
+    const unverifiedCredentials = data.credentials.filter(
+      (c) => c.successCount === 0 && !c.disabled,
+    );
+
+    if (unverifiedCredentials.length === 0) {
+      toast.info("没有未验证的凭据需要测试");
+      return;
+    }
+
+    if (
+      !confirm(
+        `将对 ${unverifiedCredentials.length} 个未验证凭据进行测试（每个测试 20 次），这可能需要较长时间，是否继续？`,
+      )
+    ) {
+      return;
+    }
+
+    setTestingCredentials(true);
+
+    try {
+      const response = await testCredentials({
+        testCount: 20,
+        model: getTestModel(),
+      });
+
+      if (response.success) {
+        // 刷新凭据列表以显示更新后的成功次数
+        await refetch();
+
+        const summary = response.results
+          .map(
+            (r: {
+              credentialId: number;
+              successCount: number;
+              totalCount: number;
+            }) =>
+              `凭据 #${r.credentialId}: 成功 ${r.successCount}/${r.totalCount}`,
+          )
+          .join("\n");
+
+        toast.success(`测试完成\n${summary}`);
+      } else {
+        toast.error(`测试失败: ${response.message}`);
+      }
+    } catch (error) {
+      toast.error(`测试失败: ${extractErrorMessage(error)}`);
+    } finally {
+      setTestingCredentials(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -857,6 +977,18 @@ export function Dashboard({ onLogout }: DashboardProps) {
                         : "查询"}
                     </Button>
                   )}
+                  <Button
+                    onClick={handleTestCredentials}
+                    size="sm"
+                    variant="outline"
+                    disabled={testingCredentials}
+                    className="h-8 text-xs"
+                  >
+                    <CheckCircle2
+                      className={`h-3 w-3 mr-1 ${testingCredentials ? "animate-spin" : ""}`}
+                    />
+                    {testingCredentials ? "测试中..." : "测试凭据"}
+                  </Button>
                   {data?.credentials && data.credentials.length > 0 && (
                     <Button
                       onClick={handleClearAll}
@@ -926,6 +1058,9 @@ export function Dashboard({ onLogout }: DashboardProps) {
                             setBalanceMap((prev) =>
                               new Map(prev).set(id, balance),
                             );
+                          }}
+                          onCredentialTested={() => {
+                            refetch();
                           }}
                           onPrimarySet={() => {
                             if (loadBalancingData?.mode !== "priority") {

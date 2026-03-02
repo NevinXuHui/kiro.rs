@@ -127,6 +127,22 @@ async fn main() {
         std::process::exit(1);
     });
     let token_manager = Arc::new(token_manager);
+
+    // 启动时自动测试未验证的凭证（后台任务）
+    let token_manager_for_test = token_manager.clone();
+    tokio::spawn(async move {
+        // 等待服务启动完成
+        tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+        tracing::info!("开始自动测试未验证凭证...");
+        let results = token_manager_for_test.test_unverified_credentials(20, "claude-sonnet-4-20250514").await;
+        if !results.is_empty() {
+            tracing::info!("凭证测试完成，结果:");
+            for (id, success, failed) in results {
+                tracing::info!("  凭证 #{}: 成功 {}/20, 失败 {}", id, success, failed);
+            }
+        }
+    });
+
     let kiro_provider = KiroProvider::with_proxy(token_manager.clone(), shared_proxy.clone());
     // 为 Admin API 连通性测试创建独立的 KiroProvider（共享 token_manager 和 proxy）
     let kiro_provider_admin = Arc::new(

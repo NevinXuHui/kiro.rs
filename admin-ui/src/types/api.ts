@@ -211,3 +211,27 @@ export interface ConnectivityTestResponse {
   outputTokens: number | null;
   error: string | null;
 }
+
+// ============ 凭证测试 ============
+
+// 凭证测试请求
+export interface TestCredentialsRequest {
+  testCount?: number; // 默认 20
+  credentialIds?: number[]; // 指定要测试的凭证ID列表（可选）
+  model?: string; // 测试使用的模型（可选）
+}
+
+// 凭证测试响应
+export interface TestCredentialsResponse {
+  success: boolean;
+  message: string;
+  results: CredentialTestResult[];
+}
+
+// 单个凭证测试结果
+export interface CredentialTestResult {
+  credentialId: number;
+  successCount: number;
+  failedCount: number;
+  totalCount: number;
+}
